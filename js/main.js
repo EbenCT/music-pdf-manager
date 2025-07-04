@@ -1,6 +1,6 @@
 /**
- * MUSIC PDF MANAGER - MAIN APPLICATION SCRIPT
- * Script principal que maneja la lógica de la aplicación
+ * MUSIC PDF MANAGER - MAIN APPLICATION SCRIPT (SOLO GOOGLE DRIVE REAL)
+ * Script principal que maneja EXCLUSIVAMENTE Google Drive API
  */
 
 // === ESTADO GLOBAL DE LA APLICACIÓN ===
@@ -17,7 +17,9 @@ const AppState = {
     },
     searchQuery: '',
     isLoading: false,
-    pdfViewer: null
+    pdfViewer: null,
+    driveAPI: null,
+    isAuthenticated: false
 };
 
 // === CONTROLADOR PRINCIPAL DE LA APLICACIÓN ===
@@ -33,6 +35,12 @@ class MusicPDFManager {
     async init() {
         try {
             console.log('🎵 Iniciando Music PDF Manager...');
+            console.log('☁️ Modo: SOLO GOOGLE DRIVE REAL');
+            
+            // Verificar credenciales
+            if (!this.config.credentialsValid) {
+                throw new Error('Credenciales de Google Drive no válidas');
+            }
             
             // Configurar event listeners
             this.setupEventListeners();
@@ -46,6 +54,9 @@ class MusicPDFManager {
             // Inicializar visualizador de PDF
             this.setupPDFViewer();
             
+            // Inicializar Google Drive API
+            await this.initializeDriveAPI();
+            
             // Cargar archivos
             await this.loadFiles();
             
@@ -53,7 +64,28 @@ class MusicPDFManager {
             
         } catch (error) {
             console.error('❌ Error al inicializar la aplicación:', error);
-            this.showError('Error al inicializar la aplicación');
+            this.showCriticalError(error.message);
+        }
+    }
+
+    /**
+     * Inicializa Google Drive API
+     */
+    async initializeDriveAPI() {
+        try {
+            console.log('🔧 Inicializando Google Drive API...');
+            
+            this.driveAPI = new DriveAPI();
+            AppState.driveAPI = this.driveAPI;
+            
+            // Inicializar (esto cargará gapi pero no autenticará todavía)
+            await this.driveAPI.init();
+            
+            console.log('✅ Google Drive API lista para autenticación');
+            
+        } catch (error) {
+            console.error('❌ Error inicializando Drive API:', error);
+            throw new Error(`Error configurando Google Drive: ${error.message}`);
         }
     }
 
@@ -114,26 +146,33 @@ class MusicPDFManager {
     }
 
     /**
-     * Carga archivos desde Google Drive o datos simulados
+     * Carga archivos EXCLUSIVAMENTE desde Google Drive
      */
     async loadFiles() {
-        this.showLoading(true);
+        this.showLoading(true, 'Conectando con Google Drive...');
         
         try {
-            console.log('📁 Cargando archivos...');
+            console.log('📁 Cargando archivos desde Google Drive...');
 
-            if (this.config.isDev) {
-                // Usar datos simulados
-                console.log('🔧 Modo desarrollo: usando datos simulados');
-                AppState.files.instrumentos = [...this.config.mockData.instrumentos];
-                AppState.files.voces = [...this.config.mockData.voces];
-            } else {
-                // Cargar desde Google Drive API
-                console.log('☁️ Cargando desde Google Drive...');
-                const driveAPI = new DriveAPI();
-                AppState.files.instrumentos = await driveAPI.getFiles('instrumentos');
-                AppState.files.voces = await driveAPI.getFiles('voces');
+            if (!this.driveAPI) {
+                throw new Error('Google Drive API no está inicializada');
             }
+
+            // Mostrar mensaje de autenticación si es necesario
+            if (!AppState.isAuthenticated) {
+                this.showLoading(true, 'Iniciando sesión con Google...');
+            }
+
+            // Cargar ambas carpetas en paralelo
+            const [instrumentosFiles, vocesFiles] = await Promise.all([
+                this.driveAPI.getFiles('instrumentos'),
+                this.driveAPI.getFiles('voces')
+            ]);
+
+            // Guardar archivos
+            AppState.files.instrumentos = instrumentosFiles;
+            AppState.files.voces = vocesFiles;
+            AppState.isAuthenticated = true;
 
             // Ordenar archivos alfabéticamente
             this.sortFiles();
@@ -142,13 +181,28 @@ class MusicPDFManager {
             this.updateFileLists();
             this.updateFileCounts();
 
-            console.log(`📊 Archivos cargados: ${AppState.files.instrumentos.length} instrumentos, ${AppState.files.voces.length} voces`);
+            console.log(`📊 Archivos cargados desde Drive: ${AppState.files.instrumentos.length} instrumentos, ${AppState.files.voces.length} voces`);
+
+            // Mostrar información del usuario
+            this.showUserInfo();
 
         } catch (error) {
             console.error('❌ Error cargando archivos:', error);
-            this.showError('Error al cargar los archivos');
+            this.showDriveError(error.message);
         } finally {
             this.showLoading(false);
+        }
+    }
+
+    /**
+     * Muestra información del usuario autenticado
+     */
+    showUserInfo() {
+        if (this.driveAPI) {
+            const userInfo = this.driveAPI.getUserInfo();
+            if (userInfo) {
+                console.log(`👤 Usuario autenticado: ${userInfo.name} (${userInfo.email})`);
+            }
         }
     }
 
@@ -183,8 +237,11 @@ class MusicPDFManager {
             container.innerHTML = `
                 <div class="empty-state">
                     <div class="empty-state-icon">📄</div>
-                    <h3>No hay archivos</h3>
-                    <p>No se encontraron archivos PDF en esta sección</p>
+                    <h3>No hay archivos PDF</h3>
+                    <p>No se encontraron archivos en la carpeta de ${section}</p>
+                    <button class="btn secondary" onclick="window.app.retryLoadFiles()">
+                        🔄 Intentar de nuevo
+                    </button>
                 </div>
             `;
             return;
@@ -257,76 +314,41 @@ class MusicPDFManager {
     }
 
     /**
-     * Carga un PDF en el visualizador
+     * Carga un PDF real desde Google Drive
      */
     async loadPDF(file) {
         try {
+            console.log(`📄 Cargando PDF desde Google Drive: ${file.name}`);
+            
             // Actualizar título
             document.getElementById('current-pdf-title').textContent = file.name;
 
             // Usar el PDFViewer para cargar el archivo
             if (this.pdfViewer) {
-                await this.pdfViewer.loadPDF(file.downloadUrl || `#demo-pdf-${file.id}`);
+                await this.pdfViewer.loadPDF(file.downloadUrl);
             } else {
-                // Fallback si no hay PDFViewer
-                this.showPDFPlaceholder(file.name);
+                this.showPDFError('Visualizador PDF no disponible');
             }
 
         } catch (error) {
             console.error('❌ Error cargando PDF:', error);
-            this.showPDFError();
+            this.showPDFError(`Error cargando PDF: ${error.message}`);
         }
-    }
-
-    /**
-     * Muestra placeholder del PDF en modo desarrollo
-     */
-    showPDFPlaceholder(fileName) {
-        const viewer = document.getElementById('pdf-viewer');
-        viewer.innerHTML = `
-            <div class="pdf-placeholder">
-                <div class="placeholder">
-                    <div class="placeholder-icon">📄</div>
-                    <h3>Vista previa no disponible</h3>
-                    <p><strong>${fileName}</strong></p>
-                    <p>En modo desarrollo. Configura Google Drive API para ver PDFs reales.</p>
-                    <br>
-                    <div style="background: var(--dark-gray); padding: var(--spacing-lg); border-radius: var(--radius-md); max-width: 400px; margin: 0 auto;">
-                        <p style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5;">
-                            💡 <strong>Para ver PDFs reales:</strong><br>
-                            1. Configura Google Drive API<br>
-                            2. Actualiza las credenciales en drive-config.js<br>
-                            3. Comparte las carpetas públicamente
-                        </p>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    /**
-     * Muestra estado de carga del PDF
-     */
-    showPDFLoading() {
-        const viewer = document.getElementById('pdf-viewer');
-        viewer.innerHTML = `
-            <div class="pdf-loading">
-                <div class="spinner"></div>
-                <p>${this.config.app.MESSAGES.PDF_LOADING}</p>
-            </div>
-        `;
     }
 
     /**
      * Muestra error del PDF
      */
-    showPDFError() {
+    showPDFError(message) {
         const viewer = document.getElementById('pdf-viewer');
         viewer.innerHTML = `
             <div class="pdf-error">
                 <div class="pdf-error-icon">⚠️</div>
                 <h3>Error al cargar PDF</h3>
-                <p>No se pudo cargar el archivo PDF. Inténtalo de nuevo.</p>
+                <p>${message}</p>
+                <button class="btn secondary" onclick="window.app.retryLoadFiles()">
+                    🔄 Reintentar
+                </button>
             </div>
         `;
     }
@@ -384,6 +406,14 @@ class MusicPDFManager {
     }
 
     /**
+     * Reintenta cargar archivos
+     */
+    async retryLoadFiles() {
+        console.log('🔄 Reintentando cargar archivos...');
+        await this.loadFiles();
+    }
+
+    /**
      * Controles de zoom
      */
     zoomIn() {
@@ -417,9 +447,14 @@ class MusicPDFManager {
     /**
      * Muestra/oculta loading overlay
      */
-    showLoading(show) {
+    showLoading(show, message = 'Cargando...') {
         const overlay = document.getElementById('loading-overlay');
         if (overlay) {
+            const messageElement = overlay.querySelector('p');
+            if (messageElement) {
+                messageElement.textContent = message;
+            }
+            
             if (show) {
                 overlay.classList.add('show');
             } else {
@@ -430,19 +465,64 @@ class MusicPDFManager {
     }
 
     /**
-     * Muestra mensaje de error
+     * Muestra error crítico de la aplicación
      */
-    showError(message) {
-        console.error('❌', message);
-        // Aquí podrías mostrar un modal de error o notification
-        alert(message); // Temporal, reemplazar con UI mejor
+    showCriticalError(message) {
+        const container = document.querySelector('.main-content');
+        if (container) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: var(--spacing-xxl); color: var(--accent-red);">
+                    <div style="font-size: 4rem; margin-bottom: var(--spacing-lg);">⚠️</div>
+                    <h2>Error de Configuración</h2>
+                    <p style="margin-bottom: var(--spacing-lg);">${message}</p>
+                    <div style="background: var(--dark-gray); padding: var(--spacing-lg); border-radius: var(--radius-md); max-width: 600px; margin: 0 auto;">
+                        <h3 style="color: var(--text-primary); margin-bottom: var(--spacing-md);">Pasos para solucionar:</h3>
+                        <ol style="text-align: left; color: var(--text-secondary);">
+                            <li>Verificar credenciales en Google Cloud Console</li>
+                            <li>Comprobar que las carpetas de Drive sean accesibles</li>
+                            <li>Asegurar que la URL esté en dominios autorizados</li>
+                        </ol>
+                    </div>
+                    <button class="btn" onclick="location.reload()" style="margin-top: var(--spacing-lg);">
+                        🔄 Reintentar
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    /**
+     * Muestra error específico de Google Drive
+     */
+    showDriveError(message) {
+        // Mostrar en las listas
+        ['instrumentos', 'voces'].forEach(section => {
+            const container = document.getElementById(`${section}-list`);
+            if (container) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div style="font-size: 2rem; margin-bottom: var(--spacing-md);">☁️</div>
+                        <h3>Error de Google Drive</h3>
+                        <p style="color: var(--accent-red); margin-bottom: var(--spacing-md);">${message}</p>
+                        <button class="btn secondary" onclick="window.app.retryLoadFiles()">
+                            🔄 Intentar de nuevo
+                        </button>
+                    </div>
+                `;
+            }
+        });
+
+        // Log detallado
+        console.error('❌ Error de Google Drive:', message);
+        if (this.driveAPI) {
+            console.log('🔍 Estado de conexión:', this.driveAPI.getConnectionStatus());
+        }
     }
 
     /**
      * Configura la funcionalidad de búsqueda
      */
     setupSearch() {
-        // Inicializar SearchManager
         this.searchManager = new SearchManager();
         console.log('🔍 Sistema de búsqueda configurado');
     }
@@ -451,7 +531,6 @@ class MusicPDFManager {
      * Configura el visualizador de PDF
      */
     setupPDFViewer() {
-        // Inicializar PDFViewer
         this.pdfViewer = new PDFViewer('pdf-viewer');
         AppState.pdfViewer = this.pdfViewer;
         console.log('📄 Visualizador PDF configurado');
@@ -476,9 +555,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
+    if (typeof DriveAPI === 'undefined') {
+        console.error('❌ DriveAPI no está disponible');
+        return;
+    }
+
     // Inicializar la aplicación
     window.app = new MusicPDFManager();
 });
 
 // === EXPORTAR PARA DEBUGGING ===
 window.AppState = AppState;
+
+console.log('🚀 Main.js cargado: SOLO GOOGLE DRIVE REAL');

@@ -1,6 +1,6 @@
 /**
- * MUSIC PDF MANAGER - GOOGLE DRIVE API INTEGRATION
- * Maneja la integración con Google Drive API para obtener archivos PDF
+ * MUSIC PDF MANAGER - GOOGLE DRIVE API INTEGRATION (SOLO DRIVE REAL)
+ * Maneja la integración EXCLUSIVA con Google Drive API
  */
 
 class DriveAPI {
@@ -9,10 +9,11 @@ class DriveAPI {
         this.isSignedIn = false;
         this.gapi = null;
         this.config = window.DRIVE_CONFIG;
+        this.authInstance = null;
     }
 
     /**
-     * Inicializa Google API
+     * Inicializa Google API - OBLIGATORIO
      */
     async init() {
         try {
@@ -20,31 +21,59 @@ class DriveAPI {
 
             console.log('☁️ Inicializando Google Drive API...');
 
+            // Verificar credenciales
+            if (!this.config.API_KEY || !this.config.CLIENT_ID) {
+                throw new Error('Credenciales de Google Drive no configuradas');
+            }
+
             // Cargar Google API
             await this.loadGoogleAPI();
 
-            // Inicializar Google API Client
-            await this.gapi.load('client:auth2', async () => {
-                await this.gapi.client.init({
-                    apiKey: this.config.API_KEY,
-                    clientId: this.config.CLIENT_ID,
-                    discoveryDocs: [this.config.DISCOVERY_DOC],
-                    scope: this.config.SCOPES
+            // Verificar que gapi se cargó
+            if (!this.gapi || typeof this.gapi.load !== 'function') {
+                throw new Error('Google API no se cargó correctamente');
+            }
+
+            // Inicializar con Promise para manejo de errores
+            await new Promise((resolve, reject) => {
+                this.gapi.load('client:auth2', async () => {
+                    try {
+                        console.log('🔧 Configurando cliente Google API...');
+                        
+                        await this.gapi.client.init({
+                            apiKey: this.config.API_KEY,
+                            clientId: this.config.CLIENT_ID,
+                            discoveryDocs: [this.config.DISCOVERY_DOC],
+                            scope: this.config.SCOPES
+                        });
+
+                        // Obtener instancia de autenticación
+                        this.authInstance = this.gapi.auth2.getAuthInstance();
+                        
+                        if (!this.authInstance) {
+                            throw new Error('No se pudo obtener instancia de autenticación');
+                        }
+
+                        // Verificar estado de autenticación
+                        this.isSignedIn = this.authInstance.isSignedIn.get();
+                        this.isInitialized = true;
+
+                        console.log('✅ Google Drive API inicializada correctamente');
+                        console.log('🔐 Usuario ya autenticado:', this.isSignedIn);
+
+                        resolve();
+                    } catch (error) {
+                        console.error('❌ Error en init de gapi.client:', error);
+                        reject(error);
+                    }
                 });
-
-                // Configurar estado de autenticación
-                this.authInstance = this.gapi.auth2.getAuthInstance();
-                this.isSignedIn = this.authInstance.isSignedIn.get();
-
-                this.isInitialized = true;
-                console.log('✅ Google Drive API inicializada');
             });
 
             return true;
 
         } catch (error) {
             console.error('❌ Error inicializando Google Drive API:', error);
-            throw new Error('No se pudo inicializar Google Drive API');
+            throw new Error(`No se pudo inicializar Google Drive API: ${error.message}`);
         }
     }
 
@@ -53,61 +82,108 @@ class DriveAPI {
      */
     loadGoogleAPI() {
         return new Promise((resolve, reject) => {
-            if (typeof gapi !== 'undefined') {
+            // Verificar si ya está cargado
+            if (typeof gapi !== 'undefined' && gapi.load) {
                 this.gapi = gapi;
+                console.log('✅ Google API ya estaba cargado');
                 resolve();
                 return;
             }
 
+            console.log('📦 Cargando Google API library...');
+            
+            // Crear y cargar script
             const script = document.createElement('script');
             script.src = 'https://apis.google.com/js/api.js';
+            script.async = true;
+            script.defer = true;
+            
             script.onload = () => {
-                this.gapi = gapi;
-                resolve();
+                if (typeof gapi !== 'undefined') {
+                    this.gapi = gapi;
+                    console.log('✅ Google API library cargada correctamente');
+                    resolve();
+                } else {
+                    reject(new Error('Google API no está disponible después de cargar el script'));
+                }
             };
-            script.onerror = reject;
+            
+            script.onerror = (error) => {
+                console.error('❌ Error cargando Google API script:', error);
+                reject(new Error('No se pudo cargar Google API script'));
+            };
+            
+            // Timeout de seguridad
+            setTimeout(() => {
+                if (!this.gapi) {
+                    reject(new Error('Timeout cargando Google API'));
+                }
+            }, 10000);
+            
             document.head.appendChild(script);
         });
     }
 
     /**
-     * Autentica al usuario si es necesario
+     * Autentica al usuario - OBLIGATORIO para acceder a Drive
      */
     async authenticate() {
         try {
+            console.log('🔐 Iniciando proceso de autenticación...');
+
+            // Asegurar que Google API esté inicializada
             if (!this.isInitialized) {
                 await this.init();
             }
 
+            // Verificar authInstance
+            if (!this.authInstance) {
+                throw new Error('Instancia de autenticación no disponible');
+            }
+
+            // Si no está autenticado, solicitar autenticación
             if (!this.isSignedIn) {
-                console.log('🔐 Solicitando autenticación...');
-                await this.authInstance.signIn();
-                this.isSignedIn = true;
-                console.log('✅ Usuario autenticado');
+                console.log('🔑 Solicitando autorización del usuario...');
+                
+                try {
+                    const authResult = await this.authInstance.signIn({
+                        prompt: 'select_account'
+                    });
+                    
+                    if (authResult && authResult.isSignedIn()) {
+                        this.isSignedIn = true;
+                        console.log('✅ Usuario autenticado exitosamente');
+                        
+                        // Log de usuario autenticado
+                        const profile = authResult.getBasicProfile();
+                        console.log('👤 Usuario:', profile.getName(), profile.getEmail());
+                    } else {
+                        throw new Error('El usuario no completó la autenticación');
+                    }
+                } catch (signInError) {
+                    console.error('❌ Error en signIn:', signInError);
+                    throw new Error('El usuario rechazó la autenticación o hubo un error');
+                }
+            } else {
+                console.log('✅ Usuario ya estaba autenticado');
             }
 
             return true;
 
         } catch (error) {
             console.error('❌ Error en autenticación:', error);
-            throw new Error('Autenticación fallida');
+            throw new Error(`Autenticación fallida: ${error.message}`);
         }
     }
 
     /**
-     * Obtiene archivos PDF de una carpeta específica
-     * @param {string} folderType - 'instrumentos' o 'voces'
-     * @returns {Array} Lista de archivos PDF
+     * Obtiene archivos PDF de una carpeta específica - SOLO DRIVE REAL
      */
     async getFiles(folderType) {
         try {
-            // En modo desarrollo, usar datos simulados
-            if (ConfigUtils.isDevelopmentMode()) {
-                console.log(`🔧 Modo desarrollo: obteniendo ${folderType} simulados`);
-                return this.getMockFiles(folderType);
-            }
+            console.log(`📁 Obteniendo archivos reales de ${folderType} desde Google Drive...`);
 
-            // Autenticar si es necesario
+            // OBLIGATORIO: Autenticar usuario
             await this.authenticate();
 
             // Obtener ID de carpeta
@@ -116,7 +192,7 @@ class DriveAPI {
                 throw new Error(`ID de carpeta no configurado para: ${folderType}`);
             }
 
-            console.log(`📁 Obteniendo archivos de ${folderType}...`);
+            console.log(`🔍 Buscando PDFs en carpeta ${folderType} (${folderId})...`);
 
             // Construir query para buscar PDFs en la carpeta
             const query = `'${folderId}' in parents and mimeType='application/pdf' and trashed=false`;
@@ -124,13 +200,22 @@ class DriveAPI {
             // Realizar petición a Google Drive API
             const response = await this.gapi.client.drive.files.list({
                 q: query,
-                fields: 'files(id,name,size,modifiedTime,webViewLink,thumbnailLink)',
+                fields: 'files(id,name,size,modifiedTime,webViewLink,thumbnailLink,parents)',
                 orderBy: this.config.ORDER_BY,
                 pageSize: this.config.MAX_RESULTS
             });
 
+            if (!response || !response.result) {
+                throw new Error('Respuesta inválida de Google Drive API');
+            }
+
             const files = response.result.files || [];
             console.log(`📊 ${files.length} archivos encontrados en ${folderType}`);
+
+            if (files.length === 0) {
+                console.warn(`⚠️ No se encontraron archivos PDF en la carpeta ${folderType}`);
+                console.log(`🔗 Verificar carpeta: ${this.config.FOLDER_URLS[folderType.toUpperCase()]}`);
+            }
 
             // Procesar archivos
             return files.map(file => this.processFile(file));
@@ -138,29 +223,9 @@ class DriveAPI {
         } catch (error) {
             console.error(`❌ Error obteniendo archivos de ${folderType}:`, error);
             
-            // Fallback a datos simulados en caso de error
-            console.log('🔄 Usando datos simulados como fallback...');
-            return this.getMockFiles(folderType);
+            // NO HAY FALLBACK - Lanzar error
+            throw new Error(`No se pudieron cargar los archivos de ${folderType}: ${error.message}`);
         }
-    }
-
-    /**
-     * Obtiene archivos simulados para desarrollo
-     */
-    getMockFiles(folderType) {
-        const mockData = window.MOCK_DATA;
-        
-        if (!mockData || !mockData[folderType]) {
-            console.warn(`⚠️ No hay datos simulados para: ${folderType}`);
-            return [];
-        }
-
-        // Simular delay de red
-        return new Promise(resolve => {
-            setTimeout(() => {
-                resolve([...mockData[folderType]]);
-            }, 500 + Math.random() * 1000); // 500-1500ms delay
-        });
     }
 
     /**
@@ -172,7 +237,14 @@ class DriveAPI {
             'voces': this.config.FOLDERS.VOCES
         };
 
-        return folderMap[folderType.toLowerCase()];
+        const folderId = folderMap[folderType.toLowerCase()];
+        
+        if (!folderId) {
+            console.error(`❌ ID de carpeta no encontrado para: ${folderType}`);
+            console.log('📋 IDs disponibles:', this.config.FOLDERS);
+        }
+
+        return folderId;
     }
 
     /**
@@ -184,7 +256,8 @@ class DriveAPI {
             name: file.name,
             size: this.formatFileSize(file.size),
             modifiedTime: file.modifiedTime,
-            downloadUrl: file.webViewLink,
+            downloadUrl: this.getViewerURL(file.id),
+            webViewLink: file.webViewLink,
             thumbnailLink: file.thumbnailLink || null,
             mimeType: 'application/pdf'
         };
@@ -204,16 +277,17 @@ class DriveAPI {
     }
 
     /**
+     * Obtiene la URL directa de visualización de un PDF
+     */
+    getViewerURL(fileId) {
+        return `https://drive.google.com/file/d/${fileId}/preview`;
+    }
+
+    /**
      * Descarga un archivo PDF
-     * @param {string} fileId - ID del archivo en Google Drive
-     * @returns {Blob} Archivo PDF como blob
      */
     async downloadFile(fileId) {
         try {
-            if (ConfigUtils.isDevelopmentMode()) {
-                throw new Error('Descarga no disponible en modo desarrollo');
-            }
-
             await this.authenticate();
 
             console.log(`⬇️ Descargando archivo: ${fileId}`);
@@ -236,29 +310,10 @@ class DriveAPI {
     }
 
     /**
-     * Obtiene la URL directa de visualización de un PDF
-     * @param {string} fileId - ID del archivo
-     * @returns {string} URL para visualizar el PDF
-     */
-    getViewerURL(fileId) {
-        if (ConfigUtils.isDevelopmentMode()) {
-            return `#demo-pdf-${fileId}`;
-        }
-
-        return `https://drive.google.com/file/d/${fileId}/preview`;
-    }
-
-    /**
      * Verifica permisos de acceso a una carpeta
-     * @param {string} folderId - ID de la carpeta
-     * @returns {boolean} True si tiene acceso
      */
     async checkFolderAccess(folderId) {
         try {
-            if (ConfigUtils.isDevelopmentMode()) {
-                return true;
-            }
-
             await this.authenticate();
 
             const response = await this.gapi.client.drive.files.get({
@@ -266,29 +321,22 @@ class DriveAPI {
                 fields: 'id,name,permissions'
             });
 
-            return response.result && response.result.id === folderId;
+            const hasAccess = response.result && response.result.id === folderId;
+            console.log(`🔐 Acceso a carpeta ${folderId}:`, hasAccess);
+            
+            return hasAccess;
 
         } catch (error) {
-            console.error('❌ Error verificando acceso a carpeta:', error);
+            console.error(`❌ Error verificando acceso a carpeta ${folderId}:`, error);
             return false;
         }
     }
 
     /**
      * Obtiene información de una carpeta
-     * @param {string} folderId - ID de la carpeta
-     * @returns {Object} Información de la carpeta
      */
     async getFolderInfo(folderId) {
         try {
-            if (ConfigUtils.isDevelopmentMode()) {
-                return {
-                    id: folderId,
-                    name: 'Carpeta Demo',
-                    fileCount: 0
-                };
-            }
-
             await this.authenticate();
 
             const response = await this.gapi.client.drive.files.get({
@@ -306,15 +354,9 @@ class DriveAPI {
 
     /**
      * Busca archivos por nombre en todas las carpetas
-     * @param {string} query - Término de búsqueda
-     * @returns {Array} Archivos encontrados
      */
     async searchFiles(query) {
         try {
-            if (ConfigUtils.isDevelopmentMode()) {
-                return this.searchMockFiles(query);
-            }
-
             await this.authenticate();
 
             const instrumentosId = this.config.FOLDERS.INSTRUMENTOS;
@@ -343,32 +385,8 @@ class DriveAPI {
 
         } catch (error) {
             console.error('❌ Error en búsqueda:', error);
-            return this.searchMockFiles(query);
+            throw new Error(`Error en búsqueda: ${error.message}`);
         }
-    }
-
-    /**
-     * Busca en archivos simulados
-     */
-    searchMockFiles(query) {
-        const mockData = window.MOCK_DATA;
-        const results = [];
-
-        // Buscar en instrumentos
-        mockData.instrumentos.forEach(file => {
-            if (file.name.toLowerCase().includes(query.toLowerCase())) {
-                results.push({ ...file, section: 'instrumentos' });
-            }
-        });
-
-        // Buscar en voces
-        mockData.voces.forEach(file => {
-            if (file.name.toLowerCase().includes(query.toLowerCase())) {
-                results.push({ ...file, section: 'voces' });
-            }
-        });
-
-        return results;
     }
 
     /**
@@ -400,6 +418,19 @@ class DriveAPI {
             name: profile.getName(),
             email: profile.getEmail(),
             imageUrl: profile.getImageUrl()
+        };
+    }
+
+    /**
+     * Verifica el estado de la conexión
+     */
+    getConnectionStatus() {
+        return {
+            isInitialized: this.isInitialized,
+            isSignedIn: this.isSignedIn,
+            hasAuthInstance: !!this.authInstance,
+            hasGapi: !!this.gapi,
+            userInfo: this.getUserInfo()
         };
     }
 }
@@ -439,3 +470,5 @@ const DriveUtils = {
 // === EXPORTAR ===
 window.DriveAPI = DriveAPI;
 window.DriveUtils = DriveUtils;
+
+console.log('🚀 Drive API cargada: SOLO CONEXIÓN REAL');
