@@ -1,0 +1,430 @@
+/* ===== RESPONSIVE DESIGN ===== */
+
+/* === LARGE SCREENS (1200px+) === */
+@media (min-width: 1200px) {
+    .content-grid {
+        grid-template-columns: 450px 1fr;
+    }
+    
+    .search-container {
+        min-width: 350px;
+    }
+    
+    .header-content {
+        padding: var(--spacing-lg) var(--spacing-xl);
+    }
+}
+
+/* === MEDIUM SCREENS (768px - 1199px) === */
+@media (max-width: 1199px) {
+    .content-grid {
+        grid-template-columns: 350px 1fr;
+        gap: var(--spacing-lg);
+    }
+    
+    .main-content {
+        padding: var(--spacing-lg) var(--spacing-md);
+    }
+    
+    .pdf-list {
+        max-height: 350px;
+    }
+}
+
+/* === TABLETS (768px - 991px) === */
+@media (max-width: 991px) {
+    .header-content {
+        flex-direction: column;
+        gap: var(--spacing-lg);
+        text-align: center;
+    }
+    
+    .nav-tabs {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .module-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--spacing-lg);
+    }
+    
+    .search-container {
+        min-width: auto;
+        width: 100%;
+    }
+    
+    .content-grid {
+        grid-template-columns: 1fr;
+        gap: var(--spacing-lg);
+    }
+    
+    .pdf-lists {
+        order: 2;
+    }
+    
+    .pdf-viewer-container {
+        order: 1;
+        min-height: 400px;
+    }
+    
+    .viewer-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--spacing-md);
+    }
+    
+    .viewer-controls {
+        justify-content: center;
+    }
+}
+
+/* === MOBILE LANDSCAPE (576px - 767px) === */
+@media (max-width: 767px) {
+    .header-content {
+        padding: var(--spacing-md);
+    }
+    
+    .logo-section {
+        flex-direction: column;
+        gap: var(--spacing-sm);
+    }
+    
+    .logo-placeholder {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2rem;
+    }
+    
+    .header h1 {
+        font-size: 1.5rem;
+    }
+    
+    .nav-tabs {
+        width: 100%;
+    }
+    
+    .nav-tab {
+        flex: 1;
+        text-align: center;
+        padding: var(--spacing-md);
+        font-size: 0.8rem;
+    }
+    
+    .main-content {
+        padding: var(--spacing-md);
+    }
+    
+    .module-header h2 {
+        font-size: 1.4rem;
+    }
+    
+    .pdf-lists {
+        margin-bottom: var(--spacing-lg);
+    }
+    
+    .pdf-section {
+        margin-bottom: var(--spacing-md);
+    }
+    
+    .pdf-list {
+        max-height: 250px;
+    }
+    
+    .section-header {
+        padding: var(--spacing-md);
+    }
+    
+    .section-header h3 {
+        font-size: 1rem;
+    }
+    
+    .pdf-item {
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+    
+    .pdf-viewer {
+        min-height: 400px;
+    }
+    
+    .viewer-header {
+        padding: var(--spacing-md);
+    }
+    
+    .viewer-header h3 {
+        font-size: 1rem;
+        text-align: center;
+    }
+    
+    .control-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 0.9rem;
+    }
+    
+    .pdf-navigation {
+        position: relative;
+        top: auto;
+        right: auto;
+        margin: var(--spacing-md);
+        justify-content: center;
+    }
+}
+
+/* === MOBILE PORTRAIT (320px - 575px) === */
+@media (max-width: 575px) {
+    .header-content {
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+    
+    .logo-section {
+        gap: var(--spacing-xs);
+    }
+    
+    .logo-placeholder {
+        width: 36px;
+        height: 36px;
+        font-size: 1rem;
+    }
+    
+    .header h1 {
+        font-size: 1.3rem;
+    }
+    
+    .nav-tab {
+        padding: var(--spacing-sm);
+        font-size: 0.75rem;
+    }
+    
+    .main-content {
+        padding: var(--spacing-sm);
+    }
+    
+    .module-header {
+        gap: var(--spacing-md);
+    }
+    
+    .module-header h2 {
+        font-size: 1.2rem;
+        text-align: center;
+    }
+    
+    .search-input {
+        padding: var(--spacing-sm) var(--spacing-md);
+        font-size: 0.9rem;
+    }
+    
+    .section-header {
+        padding: var(--spacing-sm) var(--spacing-md);
+        flex-direction: column;
+        gap: var(--spacing-xs);
+        text-align: center;
+    }
+    
+    .section-header h3 {
+        font-size: 0.9rem;
+    }
+    
+    .count {
+        font-size: 0.7rem;
+        padding: 2px var(--spacing-xs);
+    }
+    
+    .pdf-item {
+        padding: var(--spacing-sm);
+        font-size: 0.9rem;
+    }
+    
+    .pdf-item-meta {
+        font-size: 0.7rem;
+    }
+    
+    .pdf-list {
+        max-height: 200px;
+    }
+    
+    .viewer-header {
+        padding: var(--spacing-sm) var(--spacing-md);
+        flex-direction: column;
+        gap: var(--spacing-sm);
+    }
+    
+    .viewer-header h3 {
+        font-size: 0.9rem;
+    }
+    
+    .viewer-controls {
+        gap: var(--spacing-xs);
+    }
+    
+    .control-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 0.8rem;
+    }
+    
+    #zoom-level {
+        font-size: 0.8rem;
+        min-width: 40px;
+    }
+    
+    .pdf-viewer {
+        min-height: 300px;
+    }
+    
+    .placeholder-icon {
+        font-size: 3rem !important;
+    }
+    
+    .placeholder p {
+        font-size: 0.9rem;
+    }
+    
+    .pdf-navigation {
+        flex-direction: column;
+        gap: var(--spacing-xs);
+        padding: var(--spacing-xs);
+    }
+    
+    .pdf-navigation input {
+        width: 50px;
+        font-size: 0.8rem;
+    }
+    
+    .nav-btn {
+        width: 24px;
+        height: 24px;
+        font-size: 0.7rem;
+    }
+    
+    .search-results {
+        max-height: 200px;
+    }
+    
+    .search-result-item {
+        padding: var(--spacing-sm);
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--spacing-xs);
+    }
+    
+    .search-result-name {
+        font-size: 0.9rem;
+    }
+    
+    .search-result-section {
+        font-size: 0.7rem;
+    }
+}
+
+/* === EXTRA SMALL MOBILE (< 320px) === */
+@media (max-width: 319px) {
+    .header h1 {
+        font-size: 1.1rem;
+    }
+    
+    .nav-tab {
+        padding: var(--spacing-xs);
+        font-size: 0.7rem;
+    }
+    
+    .module-header h2 {
+        font-size: 1.1rem;
+    }
+    
+    .section-header h3 {
+        font-size: 0.8rem;
+    }
+    
+    .pdf-item {
+        font-size: 0.8rem;
+    }
+    
+    .viewer-header h3 {
+        font-size: 0.8rem;
+    }
+}
+
+/* === PRINT STYLES === */
+@media print {
+    .header,
+    .nav-tabs,
+    .search-container,
+    .viewer-controls,
+    .pdf-navigation {
+        display: none !important;
+    }
+    
+    .content-grid {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+    
+    .pdf-lists {
+        display: none;
+    }
+    
+    .pdf-viewer-container {
+        border: none;
+        box-shadow: none;
+        background: white;
+    }
+    
+    .pdf-viewer {
+        background: white;
+        overflow: visible;
+        height: auto;
+    }
+    
+    body {
+        background: white;
+        color: black;
+    }
+}
+
+/* === HIGH DPI DISPLAYS === */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .logo-placeholder {
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .pdf-viewer canvas {
+        image-rendering: -webkit-optimize-contrast;
+        image-rendering: crisp-edges;
+    }
+}
+
+/* === DARK MODE PREFERENCES === */
+@media (prefers-color-scheme: dark) {
+    /* Already using dark theme by default */
+}
+
+/* === REDUCED MOTION === */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    
+    .spinner {
+        animation: none;
+    }
+}
+
+/* === HIGH CONTRAST === */
+@media (prefers-contrast: high) {
+    :root {
+        --border-gray: #666666;
+        --accent-red: #ff4757;
+        --text-primary: #ffffff;
+        --text-secondary: #e0e0e0;
+    }
+    
+    .pdf-item:hover,
+    .nav-tab:hover,
+    .btn:hover {
+        outline: 2px solid var(--accent-red);
+    }
+}

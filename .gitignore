@@ -1,0 +1,13 @@
+# Archivos de configuración sensibles
+config/credentials.json
+config/api-keys.js
+
+# Archivos temporales
+*.tmp
+*.temp
+
+# Dependencias descargadas
+libs/downloaded/
+
+# Logs
+*.log

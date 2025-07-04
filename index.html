@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music PDF Manager</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/modules.css">
+    <link rel="stylesheet" href="css/responsive.css">
+    
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo-section">
+                    <div class="logo-placeholder">🎵</div>
+                    <h1>Music PDF Manager</h1>
+                </div>
+                <nav class="nav-tabs">
+                    <button class="nav-tab active" data-module="visualizer">
+                        📄 Visualizador
+                    </button>
+                    <button class="nav-tab" data-module="combiner">
+                        🔗 Combinador
+                    </button>
+                    <button class="nav-tab" data-module="musical">
+                        🎼 Musical
+                    </button>
+                </nav>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Módulo 1: Visualizador -->
+            <div id="visualizer-module" class="module active">
+                <div class="module-header">
+                    <h2>📄 Módulo de Visualización</h2>
+                    <div class="search-container">
+                        <input type="text" id="search-input" placeholder="🔍 Buscar archivos..." class="search-input">
+                        <div class="search-results" id="search-results"></div>
+                    </div>
+                </div>
+
+                <div class="content-grid">
+                    <!-- Panel Izquierdo: Listas de PDFs -->
+                    <div class="pdf-lists">
+                        <!-- Sección Instrumentos -->
+                        <div class="pdf-section">
+                            <div class="section-header">
+                                <h3>🎸 Instrumentos</h3>
+                                <span class="count" id="instrumentos-count">0 archivos</span>
+                            </div>
+                            <div class="pdf-list" id="instrumentos-list">
+                                <div class="loading">Cargando archivos...</div>
+                            </div>
+                        </div>
+
+                        <!-- Sección Voces -->
+                        <div class="pdf-section">
+                            <div class="section-header">
+                                <h3>🎤 Voces</h3>
+                                <span class="count" id="voces-count">0 archivos</span>
+                            </div>
+                            <div class="pdf-list" id="voces-list">
+                                <div class="loading">Cargando archivos...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel Derecho: Visualizador de PDF -->
+                    <div class="pdf-viewer-container">
+                        <div class="viewer-header">
+                            <h3 id="current-pdf-title">Selecciona un archivo PDF</h3>
+                            <div class="viewer-controls">
+                                <button id="zoom-out" class="control-btn">🔍-</button>
+                                <span id="zoom-level">100%</span>
+                                <button id="zoom-in" class="control-btn">🔍+</button>
+                                <button id="fullscreen" class="control-btn">⛶</button>
+                            </div>
+                        </div>
+                        <div class="pdf-viewer" id="pdf-viewer">
+                            <div class="placeholder">
+                                <div class="placeholder-icon">📄</div>
+                                <p>Haz clic en cualquier archivo PDF de la lista para visualizarlo aquí</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Módulo 2: Combinador (Placeholder) -->
+            <div id="combiner-module" class="module">
+                <div class="module-header">
+                    <h2>🔗 Módulo de Combinación</h2>
+                </div>
+                <div class="placeholder">
+                    <p>Módulo en desarrollo...</p>
+                </div>
+            </div>
+
+            <!-- Módulo 3: Musical (Placeholder) -->
+            <div id="musical-module" class="module">
+                <div class="module-header">
+                    <h2>🎼 Módulo Musical Instructivo</h2>
+                </div>
+                <div class="placeholder">
+                    <p>Módulo en desarrollo...</p>
+                </div>
+            </div>
+        </main>
+
+        <!-- Loading Overlay -->
+        <div id="loading-overlay" class="loading-overlay">
+            <div class="loading-spinner">
+                <div class="spinner"></div>
+                <p>Cargando...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="config/drive-config.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/drive-api.js"></script>
+    <script src="js/pdf-viewer.js"></script>
+    <script src="js/search.js"></script>
+</body>
+</html>
