@@ -7,7 +7,7 @@
 const DRIVE_CONFIG = {
     // Google Drive API Configuration
     API_KEY: 'AIzaSyBCckvzf00l5jUDfqOhjjt25qeqRa2CAeI',
-    CLIENT_ID: '174351007107-pnhn3g2mqijl4p3omgp9frg37mt9l8g5.apps.googleusercontent.com',
+    CLIENT_ID: '174351007107-7h8ud8a89u46cas99cidr9kc15kof02b.apps.googleusercontent.com',
     DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
     SCOPES: 'https://www.googleapis.com/auth/drive.readonly',
     
