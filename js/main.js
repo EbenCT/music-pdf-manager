@@ -218,45 +218,7 @@ class MusicPDFManager {
     highlightSearchTerms(text) {
         if (!AppState.searchQuery || AppState.searchQuery.length < 2) return text;
 
-        const regex = new RegExp(`(${AppState.searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\    /**
-     * Renderiza una lista de archivos
-     */
-    renderFileList(section, files) {
-        const container = document.getElementById(`${section}-list`);
-        if (!container) return;
-
-        if (files.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">📄</div>
-                    <h3>No hay archivos</h3>
-                    <p>No se encontraron archivos PDF en esta sección</p>
-                </div>
-            `;
-            return;
-        }
-
-        container.innerHTML = files.map(file => `
-            <div class="pdf-item" data-file-id="${file.id}" data-section="${section}">
-                <span class="pdf-item-icon">📄</span>
-                <div class="pdf-item-info">
-                    <div class="pdf-item-name">${this.highlightSearch(file.name)}</div>
-                    <div class="pdf-item-meta">
-                        ${file.size} • ${ConfigUtils.formatDate(file.modifiedTime)}
-                    </div>
-                </div>
-            </div>
-        `).join('');
-
-        // Agregar event listeners
-        container.querySelectorAll('.pdf-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const fileId = item.dataset.fileId;
-                const section = item.dataset.section;
-                this.selectFile(fileId, section);
-            });
-        });
-    }')})`, 'gi');
+        const regex = new RegExp(`(${AppState.searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
         return text.replace(regex, '<span class="search-result-match">$1</span>');
     }
 
@@ -340,15 +302,6 @@ class MusicPDFManager {
                 </div>
             </div>
         `;
-    }
-
-    /**
-     * Renderiza un PDF real
-     */
-    async renderPDF(url) {
-        // Esta función se implementará cuando tengamos acceso real a PDFs
-        console.log('🔄 Renderizando PDF:', url);
-        // Implementación con PDF.js aquí
     }
 
     /**
