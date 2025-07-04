@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: music-pdf-manager
+    env: static
+    buildCommand: ""
+    staticPublishPath: .
+    headers:
+      # Permitir scripts de Google
+      - path: "/*.js"
+        name: "Content-Type"
+        value: "application/javascript; charset=utf-8"
+      # Permitir CSS
+      - path: "/*.css"
+        name: "Content-Type" 
+        value: "text/css; charset=utf-8"
+      # Headers de seguridad pero permisivos para Google APIs
+      - path: "/*"
+        name: "X-Frame-Options"
+        value: "SAMEORIGIN"
+      - path: "/*"
+        name: "X-Content-Type-Options"
+        value: "nosniff"
+      # CORS para APIs de Google
+      - path: "/*"
+        name: "Access-Control-Allow-Origin"
+        value: "*"
+      - path: "/*"
+        name: "Access-Control-Allow-Methods"
+        value: "GET, POST, OPTIONS"
+      - path: "/*"
+        name: "Access-Control-Allow-Headers"
+        value: "Content-Type, Authorization"
+    routes:
+      # SPA routing
+      - type: rewrite
+        source: "/((?!.*\\.).*)"
+        destination: "/index.html"
