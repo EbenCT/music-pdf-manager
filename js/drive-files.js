@@ -1,14 +1,16 @@
 /**
- * GOOGLE DRIVE FILES MODULE
- * Maneja operaciones con archivos de Google Drive
+ * GOOGLE DRIVE FILES MODULE - SIN LÍMITES
+ * Carga TODOS los archivos PDF sin restricciones
  */
 
 class DriveFiles {
     constructor(config, driveAuth) {
         this.config = config;
         this.driveAuth = driveAuth;
+        this.loadingProgress = { current: 0, total: 0 };
     }
 
+    // ← MÉTODO PRINCIPAL - CARGA TODOS LOS ARCHIVOS
     async getFiles(folderType) {
         try {
             if (!this.driveAuth.isSignedIn || !this.driveAuth.accessToken || !this.driveAuth.isTokenValid()) {
@@ -20,30 +22,14 @@ class DriveFiles {
                 throw new Error(`ID de carpeta no configurado para: ${folderType}`);
             }
 
-            try {
-                await this.driveAuth.gapi.client.drive.files.get({
-                    fileId: folderId,
-                    fields: 'id,name'
-                });
-            } catch (accessError) {
-                throw new Error(`No tienes acceso a la carpeta ${folderType}`);
-            }
+            // Verificar acceso a la carpeta
+            await this.verifyFolderAccess(folderId, folderType);
 
-            const query = `'${folderId}' in parents and mimeType='application/pdf' and trashed=false`;
-
-            const response = await this.driveAuth.gapi.client.drive.files.list({
-                q: query,
-                fields: 'files(id,name,size,modifiedTime,webViewLink,thumbnailLink,parents)',
-                orderBy: this.config.ORDER_BY,
-                pageSize: this.config.MAX_RESULTS
-            });
-
-            if (!response || !response.result) {
-                throw new Error('Respuesta inválida de Google Drive API');
-            }
-
-            const files = response.result.files || [];
-            return files.map(file => this.processFile(file));
+            // ← CARGAR TODOS LOS ARCHIVOS SIN LÍMITE
+            const allFiles = await this.loadAllFilesFromFolder(folderId, folderType);
+            
+            console.log(`✅ Cargados ${allFiles.length} archivos de ${folderType}`);
+            return allFiles.map(file => this.processFile(file));
 
         } catch (error) {
             console.error(`❌ Error obteniendo archivos de ${folderType}:`, error);
@@ -54,28 +40,73 @@ class DriveFiles {
                 throw new Error('Token expirado. Inicia sesión nuevamente.');
             }
             
-            let errorMessage = `Error cargando archivos de ${folderType}`;
+            throw this.handleApiError(error, folderType);
+        }
+    }
+
+    // ← NUEVO: Cargar TODOS los archivos con paginación automática
+    async loadAllFilesFromFolder(folderId, folderType) {
+        const allFiles = [];
+        let nextPageToken = null;
+        let pageCount = 0;
+        
+        const query = `'${folderId}' in parents and mimeType='application/pdf' and trashed=false`;
+        
+        do {
+            pageCount++;
+            this.updateProgress(folderType, `Cargando página ${pageCount}...`);
             
-            if (error.result && error.result.error) {
-                const gError = error.result.error;
-                switch (gError.code) {
-                    case 400:
-                        errorMessage = `Error en consulta: ${gError.message}`;
-                        break;
-                    case 403:
-                        errorMessage = `Sin permisos para ${folderType}`;
-                        break;
-                    case 404:
-                        errorMessage = `Carpeta ${folderType} no encontrada`;
-                        break;
-                    default:
-                        errorMessage = `Error Google Drive (${gError.code}): ${gError.message}`;
-                }
-            } else if (error.message) {
-                errorMessage = error.message;
+            const requestParams = {
+                q: query,
+                fields: 'nextPageToken,files(id,name,size,modifiedTime,webViewLink,thumbnailLink,parents)',
+                orderBy: this.config.ORDER_BY,
+                pageSize: this.config.BATCH_SIZE || 1000
+            };
+            
+            if (nextPageToken) {
+                requestParams.pageToken = nextPageToken;
             }
             
-            throw new Error(errorMessage);
+            const response = await this.driveAuth.gapi.client.drive.files.list(requestParams);
+            
+            if (!response || !response.result) {
+                throw new Error('Respuesta inválida de Google Drive API');
+            }
+            
+            const files = response.result.files || [];
+            allFiles.push(...files);
+            
+            nextPageToken = response.result.nextPageToken;
+            
+            this.updateProgress(folderType, `${allFiles.length} archivos cargados...`);
+            
+            // Pequeña pausa para no saturar la API
+            if (nextPageToken && this.config.LOADING?.BATCH_DELAY) {
+                await new Promise(resolve => setTimeout(resolve, this.config.LOADING.BATCH_DELAY));
+            }
+            
+        } while (nextPageToken);
+        
+        return allFiles;
+    }
+
+    // ← NUEVO: Actualizar progreso de carga
+    updateProgress(folderType, message) {
+        if (window.app && window.app.updateLoadingProgress) {
+            window.app.updateLoadingProgress(folderType, message);
+        } else {
+            console.log(`📁 ${folderType}: ${message}`);
+        }
+    }
+
+    async verifyFolderAccess(folderId, folderType) {
+        try {
+            await this.driveAuth.gapi.client.drive.files.get({
+                fileId: folderId,
+                fields: 'id,name'
+            });
+        } catch (accessError) {
+            throw new Error(`No tienes acceso a la carpeta ${folderType}`);
         }
     }
 
@@ -108,12 +139,14 @@ class DriveFiles {
         return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${this.config.API_KEY}`;
     }
 
+    // ← MÉTODO DE DESCARGA MEJORADO
     async downloadFileBlob(fileId) {
         try {
             if (!this.driveAuth.isSignedIn || !this.driveAuth.accessToken) {
                 throw new Error('No hay sesión activa');
             }
 
+            // Método 1: Con autorización (más confiable)
             const authUrl = this.getDirectDownloadURL(fileId);
             
             try {
@@ -125,26 +158,26 @@ class DriveFiles {
                 });
 
                 if (authResponse.ok) {
-                    const blob = await authResponse.blob();
-                    return blob;
+                    return await authResponse.blob();
                 }
             } catch (authError) {
-                console.log('⚠️ Error con auth:', authError.message);
+                console.log('⚠️ Método autorizado falló, intentando método público...');
             }
 
+            // Método 2: URL pública (backup)
             const publicUrl = this.getPublicDownloadURL(fileId);
             
             try {
                 const publicResponse = await fetch(publicUrl);
                 
                 if (publicResponse.ok) {
-                    const blob = await publicResponse.blob();
-                    return blob;
+                    return await publicResponse.blob();
                 }
             } catch (publicError) {
-                console.log('⚠️ Error descarga pública:', publicError.message);
+                console.log('⚠️ Método público falló, intentando GAPI...');
             }
 
+            // Método 3: GAPI directo (último recurso)
             try {
                 const gapiResponse = await this.driveAuth.gapi.client.drive.files.get({
                     fileId: fileId,
@@ -152,28 +185,55 @@ class DriveFiles {
                 });
 
                 if (gapiResponse.body) {
-                    const blob = new Blob([gapiResponse.body], { type: 'application/pdf' });
-                    return blob;
+                    return new Blob([gapiResponse.body], { type: 'application/pdf' });
                 }
             } catch (gapiError) {
-                console.log('⚠️ Error con GAPI:', gapiError.message);
+                console.log('⚠️ GAPI también falló');
             }
 
-            throw new Error('No se pudo descargar el archivo. Verifica que el archivo sea público o que tengas permisos de acceso.');
+            throw new Error('No se pudo descargar el archivo por ningún método disponible');
 
         } catch (error) {
             console.error('❌ Error descargando archivo:', error);
-            
-            if (error.message.includes('403')) {
-                throw new Error('Sin permisos para acceder al archivo. Verifica que sea público o que tengas acceso.');
-            } else if (error.message.includes('404')) {
-                throw new Error('Archivo no encontrado. Puede haber sido eliminado o movido.');
-            } else if (error.message.includes('401')) {
-                throw new Error('Sesión expirada. Inicia sesión nuevamente.');
-            }
-            
-            throw error;
+            throw this.handleDownloadError(error);
         }
+    }
+
+    handleApiError(error, folderType) {
+        let errorMessage = `Error cargando archivos de ${folderType}`;
+        
+        if (error.result && error.result.error) {
+            const gError = error.result.error;
+            switch (gError.code) {
+                case 400:
+                    errorMessage = `Error en consulta: ${gError.message}`;
+                    break;
+                case 403:
+                    errorMessage = `Sin permisos para ${folderType}`;
+                    break;
+                case 404:
+                    errorMessage = `Carpeta ${folderType} no encontrada`;
+                    break;
+                default:
+                    errorMessage = `Error Google Drive (${gError.code}): ${gError.message}`;
+            }
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        return new Error(errorMessage);
+    }
+
+    handleDownloadError(error) {
+        if (error.message.includes('403')) {
+            return new Error('Sin permisos para acceder al archivo. Verifica que sea público o que tengas acceso.');
+        } else if (error.message.includes('404')) {
+            return new Error('Archivo no encontrado. Puede haber sido eliminado o movido.');
+        } else if (error.message.includes('401')) {
+            return new Error('Sesión expirada. Inicia sesión nuevamente.');
+        }
+        
+        return error;
     }
 
     async getFileMetadata(fileId) {
@@ -191,6 +251,7 @@ class DriveFiles {
         }
     }
 
+    // ← NUEVO: Búsqueda sin límites
     async searchFiles(query, folderType = null) {
         try {
             let searchQuery = `mimeType='application/pdf' and trashed=false and name contains '${query}'`;
@@ -202,14 +263,32 @@ class DriveFiles {
                 }
             }
 
-            const response = await this.driveAuth.gapi.client.drive.files.list({
-                q: searchQuery,
-                fields: 'files(id,name,size,modifiedTime,webViewLink,thumbnailLink,parents)',
-                orderBy: 'name',
-                pageSize: 20
-            });
+            // Búsqueda sin límites
+            const allResults = [];
+            let nextPageToken = null;
+            
+            do {
+                const requestParams = {
+                    q: searchQuery,
+                    fields: 'nextPageToken,files(id,name,size,modifiedTime,webViewLink,thumbnailLink,parents)',
+                    orderBy: 'name',
+                    pageSize: 1000
+                };
+                
+                if (nextPageToken) {
+                    requestParams.pageToken = nextPageToken;
+                }
 
-            return response.result.files || [];
+                const response = await this.driveAuth.gapi.client.drive.files.list(requestParams);
+                
+                const files = response.result.files || [];
+                allResults.push(...files);
+                
+                nextPageToken = response.result.nextPageToken;
+                
+            } while (nextPageToken);
+
+            return allResults;
 
         } catch (error) {
             console.error('❌ Error buscando archivos:', error);
@@ -251,19 +330,29 @@ class DriveFiles {
         return `${size} ${sizes[i]}`;
     }
 
+    // ← NUEVO: Test de acceso a todas las carpetas
     async testFolderAccess() {
         const results = {};
         
         for (const [folderType, folderId] of Object.entries(this.config.FOLDERS)) {
             try {
-                await this.driveAuth.gapi.client.drive.files.get({
+                const response = await this.driveAuth.gapi.client.drive.files.get({
                     fileId: folderId,
                     fields: 'id,name'
                 });
                 
+                // Contar archivos en la carpeta
+                const countResponse = await this.driveAuth.gapi.client.drive.files.list({
+                    q: `'${folderId}' in parents and mimeType='application/pdf' and trashed=false`,
+                    fields: 'files(id)',
+                    pageSize: 1
+                });
+                
                 results[folderType.toLowerCase()] = {
                     accessible: true,
-                    folderId: folderId
+                    folderId: folderId,
+                    folderName: response.result.name,
+                    estimatedFiles: 'Cargando todos...'
                 };
                 
             } catch (error) {
@@ -276,6 +365,18 @@ class DriveFiles {
         }
         
         return results;
+    }
+
+    // ← NUEVO: Obtener estadísticas de carga
+    getLoadingStats() {
+        return {
+            progress: this.loadingProgress,
+            config: {
+                batchSize: this.config.BATCH_SIZE,
+                loadAll: this.config.LOAD_ALL_FILES,
+                maxResults: this.config.MAX_RESULTS
+            }
+        };
     }
 
     async listAvailableFolders() {
@@ -302,3 +403,5 @@ class DriveFiles {
 
 // Exportar
 window.DriveFiles = DriveFiles;
+
+console.log('📁 DriveFiles cargado: MODO SIN LÍMITES activado');

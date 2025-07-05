@@ -1,6 +1,6 @@
 /**
- * MUSIC PDF MANAGER - MAIN APPLICATION SCRIPT
- * Versión optimizada sin logs excesivos
+ * MUSIC PDF MANAGER - MAIN APPLICATION OPTIMIZADO
+ * SIN LÍMITES + AUTENTICACIÓN PERMANENTE
  */
 
 // === ESTADO GLOBAL DE LA APLICACIÓN ===
@@ -21,7 +21,12 @@ const AppState = {
     driveAPI: null,
     isAuthenticated: false,
     lastAuthCheck: null,
-    isLoadingFiles: false
+    isLoadingFiles: false,
+    // ← NUEVO: Estado de carga
+    loadingProgress: {
+        instrumentos: { current: 0, total: 0, status: 'waiting' },
+        voces: { current: 0, total: 0, status: 'waiting' }
+    }
 };
 
 // === CONTROLADOR PRINCIPAL DE LA APLICACIÓN ===
@@ -34,7 +39,7 @@ class MusicPDFManager {
 
     async init() {
         try {
-            console.log('🎵 Iniciando Music PDF Manager...');
+            console.log('🎵 Iniciando Music PDF Manager OPTIMIZADO...');
             
             if (!this.config.credentialsValid) {
                 throw new Error('Credenciales de Google Drive no válidas');
@@ -64,13 +69,23 @@ class MusicPDFManager {
         await this.driveAPI.init();
     }
 
+    // ← MODIFICADO: Auto-auth más agresiva
     async tryAutoAuthentication() {
         if (this.driveAPI.isSignedIn && this.driveAPI.isTokenValid()) {
             AppState.isAuthenticated = true;
             this.driveAPI.updateAuthStatus(true);
-            await this.loadFiles();
+            await this.loadAllFiles();
             return;
         }
+        
+        // ← NUEVO: Intentar recuperar auth almacenada
+        const recovered = await this.driveAPI.driveAuth.recoverStoredAuth();
+        if (recovered) {
+            AppState.isAuthenticated = true;
+            await this.loadAllFiles();
+            return;
+        }
+        
         this.showAuthRequired();
     }
 
@@ -118,10 +133,27 @@ class MusicPDFManager {
                     this.handleTokenExpired();
                 }
             }
-        }, 600000);
+        }, 300000); // ← REDUCIDO: Cada 5 minutos
     }
 
     handleTokenExpired() {
+        console.log('⏰ Token expirado, intentando renovación automática...');
+        
+        // ← NUEVO: Intentar renovación automática antes de desconectar
+        if (this.driveAPI.driveAuth.refreshTokenSilently) {
+            this.driveAPI.driveAuth.refreshTokenSilently()
+                .then(success => {
+                    if (!success) {
+                        this.forceReauth();
+                    }
+                })
+                .catch(() => this.forceReauth());
+        } else {
+            this.forceReauth();
+        }
+    }
+
+    forceReauth() {
         AppState.isAuthenticated = false;
         AppState.isLoadingFiles = false;
         this.driveAPI.clearStoredToken();
@@ -150,23 +182,27 @@ class MusicPDFManager {
         document.getElementById(`${moduleName}-module`).classList.add('active');
     }
 
-    async loadFiles() {
+    // ← MODIFICADO: Cargar TODOS los archivos
+    async loadAllFiles() {
         if (AppState.isLoadingFiles) return;
 
         AppState.isLoadingFiles = true;
-        this.showLoading(true, 'Cargando archivos PDF desde Google Drive...');
+        this.showLoading(true, 'Cargando TODOS los archivos PDF...');
         
         try {
-            console.log('📁 Cargando archivos desde Google Drive...');
+            console.log('📁 Cargando TODOS los archivos desde Google Drive...');
 
             if (!this.driveAPI || !AppState.isAuthenticated || !this.driveAPI.isSignedIn || !this.driveAPI.isTokenValid()) {
                 throw new Error('No hay sesión válida de Google Drive');
             }
             
-            const [instrumentosFiles, vocesFiles] = await Promise.all([
-                this.driveAPI.getFiles('instrumentos'),
-                this.driveAPI.getFiles('voces')
-            ]);
+            // ← NUEVO: Carga paralela con progreso
+            const loadPromises = [
+                this.loadFilesWithProgress('instrumentos'),
+                this.loadFilesWithProgress('voces')
+            ];
+
+            const [instrumentosFiles, vocesFiles] = await Promise.all(loadPromises);
 
             AppState.files.instrumentos = instrumentosFiles;
             AppState.files.voces = vocesFiles;
@@ -177,6 +213,9 @@ class MusicPDFManager {
             this.updateFileCounts();
             this.updateUI('files-loaded');
 
+            // ← NUEVO: Log de estadísticas
+            console.log(`✅ CARGA COMPLETA: ${instrumentosFiles.length} instrumentos + ${vocesFiles.length} voces = ${instrumentosFiles.length + vocesFiles.length} archivos totales`);
+
         } catch (error) {
             console.error('❌ Error cargando archivos:', error);
             this.showDriveError(DriveUtils.getFriendlyErrorMessage(error));
@@ -186,27 +225,70 @@ class MusicPDFManager {
         }
     }
 
+    // ← NUEVO: Carga con progreso visual
+    async loadFilesWithProgress(folderType) {
+        try {
+            AppState.loadingProgress[folderType].status = 'loading';
+            
+            this.updateLoadingProgress(folderType, 'Iniciando carga...');
+            
+            const files = await this.driveAPI.getFiles(folderType);
+            
+            AppState.loadingProgress[folderType].status = 'completed';
+            AppState.loadingProgress[folderType].total = files.length;
+            AppState.loadingProgress[folderType].current = files.length;
+            
+            this.updateLoadingProgress(folderType, `✅ ${files.length} archivos cargados`);
+            
+            return files;
+            
+        } catch (error) {
+            AppState.loadingProgress[folderType].status = 'error';
+            this.updateLoadingProgress(folderType, `❌ Error: ${error.message}`);
+            throw error;
+        }
+    }
+
+    // ← NUEVO: Actualizar progreso visual
+    updateLoadingProgress(folderType, message) {
+        const countElement = document.getElementById(`${folderType}-count`);
+        if (countElement) {
+            countElement.textContent = message;
+        }
+        
+        const listElement = document.getElementById(`${folderType}-list`);
+        if (listElement && AppState.loadingProgress[folderType].status === 'loading') {
+            listElement.innerHTML = `
+                <div class="loading">
+                    <div class="spinner" style="width: 30px; height: 30px; margin: 0 auto var(--spacing-md);"></div>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+    }
+
     updateUI(state) {
         const currentPDFTitle = document.getElementById('current-pdf-title');
         
         switch (state) {
             case 'auth-required':
                 if (currentPDFTitle) {
-                    currentPDFTitle.textContent = 'Autenticación requerida';
+                    currentPDFTitle.textContent = 'Autenticación permanente requerida';
                 }
-                this.showPlaceholderInLists('🔐 Haz clic en "Iniciar Sesión" para acceder a tus archivos');
+                this.showPlaceholderInLists('🔐 Autoriza una vez para acceso permanente a TODOS tus PDFs');
                 break;
                 
             case 'token-expired':
                 if (currentPDFTitle) {
-                    currentPDFTitle.textContent = 'Sesión expirada - Inicia sesión nuevamente';
+                    currentPDFTitle.textContent = 'Renovando sesión automáticamente...';
                 }
-                this.showPlaceholderInLists('⏰ Tu sesión ha expirado. Inicia sesión nuevamente.');
+                this.showPlaceholderInLists('⏰ Renovando acceso automático...');
                 break;
                 
             case 'files-loaded':
                 if (currentPDFTitle) {
-                    currentPDFTitle.textContent = 'Selecciona un archivo PDF para visualizar';
+                    const totalFiles = AppState.files.instrumentos.length + AppState.files.voces.length;
+                    currentPDFTitle.textContent = `${totalFiles} archivos cargados - Selecciona uno para visualizar`;
                 }
                 break;
         }
@@ -238,7 +320,7 @@ class MusicPDFManager {
         AppState.isAuthenticated = true;
         
         try {
-            await this.loadFiles();
+            await this.loadAllFiles();
         } catch (error) {
             this.showDriveError(`Error cargando archivos: ${error.message}`);
         }
@@ -318,7 +400,7 @@ class MusicPDFManager {
                     <h3>No hay archivos PDF</h3>
                     <p>No se encontraron archivos en la carpeta de ${section}</p>
                     <button class="btn secondary" onclick="window.app.retryLoadFiles()">
-                        🔄 Intentar de nuevo
+                        🔄 Recargar todos los archivos
                     </button>
                 </div>
             `;
@@ -395,7 +477,7 @@ class MusicPDFManager {
                 <p>${message}</p>
                 <div style="margin-top: var(--spacing-lg);">
                     <button class="btn secondary" onclick="window.app.retryLoadFiles()">
-                        🔄 Reintentar
+                        🔄 Recargar archivos
                     </button>
                     <button class="btn secondary" onclick="window.debugDriveConnection()" style="margin-left: var(--spacing-sm);">
                         🔧 Debug Conexión
@@ -433,23 +515,37 @@ class MusicPDFManager {
         const instCount = document.getElementById('instrumentos-count');
         const vocCount = document.getElementById('voces-count');
 
-        if (instCount) {
-            const count = AppState.filteredFiles.instrumentos.length;
-            instCount.textContent = `${count} archivo${count !== 1 ? 's' : ''}`;
+        if (instCount && AppState.loadingProgress.instrumentos.status === 'completed') {
+            const total = AppState.files.instrumentos.length;
+            const filtered = AppState.filteredFiles.instrumentos.length;
+            const text = AppState.searchQuery ? 
+                `${filtered} de ${total} archivos` : 
+                `${total} archivo${total !== 1 ? 's' : ''}`;
+            instCount.textContent = text;
         }
 
-        if (vocCount) {
-            const count = AppState.filteredFiles.voces.length;
-            vocCount.textContent = `${count} archivo${count !== 1 ? 's' : ''}`;
+        if (vocCount && AppState.loadingProgress.voces.status === 'completed') {
+            const total = AppState.files.voces.length;
+            const filtered = AppState.filteredFiles.voces.length;
+            const text = AppState.searchQuery ? 
+                `${filtered} de ${total} archivos` : 
+                `${total} archivo${total !== 1 ? 's' : ''}`;
+            vocCount.textContent = text;
         }
     }
 
+    // ← MODIFICADO: Reintentar carga completa
     async retryLoadFiles() {
         if (!AppState.isAuthenticated) {
             await this.retryConnection();
         } else {
             AppState.isLoadingFiles = false;
-            await this.loadFiles();
+            // ← LIMPIAR progreso anterior
+            AppState.loadingProgress = {
+                instrumentos: { current: 0, total: 0, status: 'waiting' },
+                voces: { current: 0, total: 0, status: 'waiting' }
+            };
+            await this.loadAllFiles();
         }
     }
 
@@ -531,7 +627,7 @@ class MusicPDFManager {
                         <p style="color: var(--accent-red); margin-bottom: var(--spacing-md);">${message}</p>
                         <div style="margin-top: var(--spacing-md);">
                             <button class="btn secondary" onclick="window.app.retryConnection()">
-                                🔄 Intentar de nuevo
+                                🔄 Reconectar
                             </button>
                             <button class="btn secondary" onclick="window.debugDriveConnection()" style="margin-left: var(--spacing-sm);">
                                 🔧 Debug
@@ -557,6 +653,46 @@ class MusicPDFManager {
         if (this.driveAPI) {
             await this.driveAPI.signOut();
         }
+    }
+
+    // ← NUEVO: Obtener estadísticas de carga
+    getLoadingStats() {
+        const totalFiles = AppState.files.instrumentos.length + AppState.files.voces.length;
+        const loadedSections = Object.values(AppState.loadingProgress)
+            .filter(p => p.status === 'completed').length;
+        
+        return {
+            totalFiles,
+            sections: {
+                instrumentos: AppState.files.instrumentos.length,
+                voces: AppState.files.voces.length
+            },
+            loadingProgress: AppState.loadingProgress,
+            completedSections: loadedSections,
+            isFullyLoaded: loadedSections === 2
+        };
+    }
+
+    // ← NUEVO: Forzar recarga completa
+    async forceFullReload() {
+        console.log('🔄 Forzando recarga completa...');
+        
+        // Limpiar cache si existe
+        if (window.clearAppCache) {
+            window.clearAppCache();
+        }
+        
+        // Reset estado
+        AppState.files = { instrumentos: [], voces: [] };
+        AppState.filteredFiles = { instrumentos: [], voces: [] };
+        AppState.isLoadingFiles = false;
+        AppState.loadingProgress = {
+            instrumentos: { current: 0, total: 0, status: 'waiting' },
+            voces: { current: 0, total: 0, status: 'waiting' }
+        };
+        
+        // Recargar
+        await this.loadAllFiles();
     }
 }
 
@@ -600,50 +736,56 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
+    console.log('🚀 Iniciando aplicación OPTIMIZADA...');
     window.app = new MusicPDFManager();
 });
 
 // === EXPORTAR PARA DEBUGGING ===
 window.AppState = AppState;
 
-// === FUNCIONES DE DEBUG SIMPLIFICADAS ===
+// === FUNCIONES DE DEBUG OPTIMIZADAS ===
 window.debugAppState = function() {
-    console.group('🔍 DEBUG DE ESTADO GLOBAL');
-    console.log('📊 Archivos:', {
+    console.group('🔍 DEBUG DE ESTADO GLOBAL OPTIMIZADO');
+    
+    const stats = window.app ? window.app.getLoadingStats() : null;
+    
+    console.log('📊 Archivos cargados:', stats || {
         instrumentos: AppState.files.instrumentos.length,
-        voces: AppState.files.voces.length
+        voces: AppState.files.voces.length,
+        total: AppState.files.instrumentos.length + AppState.files.voces.length
     });
-    console.log('📊 Estado:', {
+    
+    console.log('📊 Estado de carga:', AppState.loadingProgress);
+    
+    console.log('📊 Auth:', {
         isAuthenticated: AppState.isAuthenticated,
-        isLoadingFiles: AppState.isLoadingFiles
+        isLoadingFiles: AppState.isLoadingFiles,
+        tokenValid: AppState.driveAPI ? AppState.driveAPI.isTokenValid() : false
     });
+    
     if (AppState.driveAPI) {
-        console.log('🔐 Auth:', AppState.driveAPI.driveAuth?.getConnectionStatus());
+        console.log('🔐 Estado de conexión:', AppState.driveAPI.driveAuth?.getConnectionStatus());
     }
+    
     console.groupEnd();
 };
 
-window.debugDriveConnection = function() {
-    const driveAPI = window.AppState?.driveAPI;
-    if (!driveAPI) {
-        console.error('❌ DriveAPI no disponible');
-        return;
+window.forceFullReload = function() {
+    if (window.app && window.app.forceFullReload) {
+        window.app.forceFullReload();
+    } else {
+        console.log('🔄 Función no disponible, recargando página...');
+        location.reload();
     }
-    
-    driveAPI.debugInfo();
-    
-    if (driveAPI.isSignedIn) {
-        const files = window.AppState?.files;
-        if (files && files.instrumentos && files.instrumentos.length > 0) {
-            const testFile = files.instrumentos[0];
-            driveAPI.downloadFileBlob(testFile.id)
-                .then(blob => {
-                    console.log('✅ Test descarga exitoso:', blob.size, 'bytes');
-                })
-                .catch(error => {
-                    console.error('❌ Test descarga falló:', error);
-                });
-        }
+};
+
+window.showLoadingStats = function() {
+    if (window.app) {
+        const stats = window.app.getLoadingStats();
+        console.table(stats);
+        console.log('📊 Estadísticas detalladas:', stats);
+    } else {
+        console.error('❌ App no disponible');
     }
 };
 
@@ -656,12 +798,14 @@ window.clearAppCache = function() {
         window.app.searchManager.clearSearchHistory();
     }
     
-    const keysToKeep = ['gdrive_access_token', 'gdrive_token_expiry', 'gdrive_user_info'];
+    const keysToKeep = ['gdrive_access_token', 'gdrive_token_expiry', 'gdrive_user_info', 'gdrive_refresh_token', 'gdrive_last_auth'];
     Object.keys(localStorage).forEach(key => {
         if (!keysToKeep.includes(key)) {
             localStorage.removeItem(key);
         }
     });
     
-    console.log('✅ Cache limpiado');
+    console.log('✅ Cache limpiado (tokens de auth conservados)');
 };
+
+console.log('🎵 Main App cargada: MODO OPTIMIZADO - SIN LÍMITES + AUTH PERMANENTE');

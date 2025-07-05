@@ -1,6 +1,6 @@
 /**
  * MUSIC PDF MANAGER - DRIVE CONFIGURATION
- * Configuración para Google Drive API - Versión optimizada
+ * Configuración optimizada - SIN LÍMITES + AUTH PERMANENTE
  */
 
 // === CONFIGURACIÓN DE GOOGLE DRIVE API ===
@@ -16,8 +16,16 @@ const DRIVE_CONFIG = {
     },
     
     FILE_TYPES: ['pdf'],
-    MAX_RESULTS: 100,
+    MAX_RESULTS: 1000,  // ← AUMENTADO (Google permite hasta 1000 por request)
     ORDER_BY: 'name',
+    
+    // ← NUEVO: Configuración para carga completa
+    LOAD_ALL_FILES: true,
+    BATCH_SIZE: 1000,
+    
+    // ← NUEVO: Auth permanente 
+    PERSISTENT_AUTH: true,
+    TOKEN_REFRESH_THRESHOLD: 7 * 24 * 60 * 60 * 1000, // 7 días en ms
     
     FOLDER_URLS: {
         INSTRUMENTOS: 'https://drive.google.com/drive/folders/1tdyXTT-p7ZV1eUcvfrcvjch0Y1yC-wpV',
@@ -37,7 +45,7 @@ const APP_CONFIG = {
     SEARCH: {
         MIN_QUERY_LENGTH: 2,
         DEBOUNCE_DELAY: 300,
-        MAX_RESULTS: 10,
+        MAX_RESULTS: 50,  // ← AUMENTADO para búsquedas
         FUZZY_THRESHOLD: 0.6
     },
     
@@ -47,11 +55,19 @@ const APP_CONFIG = {
         AUTO_SAVE_DELAY: 2000
     },
     
+    // ← NUEVO: Configuración de carga
+    LOADING: {
+        SHOW_PROGRESS: true,
+        BATCH_DELAY: 100, // ms entre batches
+        MAX_CONCURRENT_REQUESTS: 3
+    },
+    
     MESSAGES: {
-        LOADING: 'Cargando archivos desde Google Drive...',
-        AUTH_REQUIRED: 'Iniciando sesión con Google...',
+        LOADING: 'Cargando todos los archivos PDF...',
+        LOADING_PROGRESS: 'Cargados {current} de {total} archivos...',
+        AUTH_REQUIRED: 'Iniciando sesión permanente con Google...',
         NO_FILES: 'No se encontraron archivos PDF en esta carpeta',
-        SEARCH_PLACEHOLDER: '🔍 Buscar archivos...',
+        SEARCH_PLACEHOLDER: '🔍 Buscar entre todos los archivos...',
         ERROR_LOADING: 'Error al cargar archivos desde Google Drive',
         ERROR_AUTH: 'Error de autenticación con Google',
         ERROR_VIEWING: 'Error al visualizar el PDF',
@@ -117,7 +133,9 @@ const ConfigUtils = {
     },
     
     logDriveStatus() {
-        console.log('☁️ Google Drive API: CONFIGURADO');
+        console.log('☁️ Google Drive API: CONFIGURADO PARA CARGA COMPLETA');
+        console.log(`📊 Configuración: MAX_RESULTS=${DRIVE_CONFIG.MAX_RESULTS}, LOAD_ALL=${DRIVE_CONFIG.LOAD_ALL_FILES}`);
+        console.log(`🔐 Auth Permanente: ${DRIVE_CONFIG.PERSISTENT_AUTH ? 'ACTIVADO' : 'DESACTIVADO'}`);
         
         if (!this.areFolderIdsValid()) {
             console.error('❌ ERROR: IDs de carpetas no válidos');
@@ -132,4 +150,4 @@ window.ConfigUtils = ConfigUtils;
 
 ConfigUtils.logDriveStatus();
 
-console.log('⚙️ Configuración cargada - Versión optimizada');
+console.log('⚙️ Configuración optimizada cargada: SIN LÍMITES + AUTH PERMANENTE');

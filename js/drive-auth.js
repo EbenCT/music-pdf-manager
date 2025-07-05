@@ -1,6 +1,6 @@
 /**
- * GOOGLE DRIVE AUTHENTICATION MODULE
- * Maneja toda la lógica de autenticación con Google Identity Services
+ * GOOGLE DRIVE AUTHENTICATION MODULE - PERMANENTE
+ * Auth que se mantiene automáticamente sin volver a pedir login
  */
 
 class DriveAuth {
@@ -13,11 +13,14 @@ class DriveAuth {
         this.gapi = null;
         this.tokenExpiryTime = null;
         this.isAuthenticating = false;
+        this.refreshTimer = null;
         
         this.STORAGE_KEYS = {
             ACCESS_TOKEN: 'gdrive_access_token',
             EXPIRY_TIME: 'gdrive_token_expiry',
-            USER_INFO: 'gdrive_user_info'
+            USER_INFO: 'gdrive_user_info',
+            REFRESH_TOKEN: 'gdrive_refresh_token',  // ← NUEVO
+            LAST_AUTH: 'gdrive_last_auth'           // ← NUEVO
         };
     }
 
@@ -32,10 +35,19 @@ class DriveAuth {
             await this.loadGoogleAPI();
             await this.initGapiClient();
             await this.initGoogleIdentity();
-            await this.checkStoredToken();
+            
+            // ← NUEVO: Intentar recuperar token existente
+            const hasValidToken = await this.recoverStoredAuth();
+            
+            if (!hasValidToken) {
+                await this.checkStoredToken();
+            }
+
+            // ← NUEVO: Configurar refresh automático
+            this.setupAutoRefresh();
 
             this.isInitialized = true;
-            console.log('✅ Autenticación Google Drive inicializada');
+            console.log('✅ Autenticación Google Drive inicializada (MODO PERMANENTE)');
 
             return true;
 
@@ -43,6 +55,126 @@ class DriveAuth {
             console.error('❌ Error inicializando autenticación:', error);
             throw error;
         }
+    }
+
+    // ← NUEVO: Recuperar autenticación almacenada
+    async recoverStoredAuth() {
+        try {
+            const storedToken = localStorage.getItem(this.STORAGE_KEYS.ACCESS_TOKEN);
+            const storedExpiry = localStorage.getItem(this.STORAGE_KEYS.EXPIRY_TIME);
+            const lastAuth = localStorage.getItem(this.STORAGE_KEYS.LAST_AUTH);
+            
+            if (!storedToken || !storedExpiry) {
+                console.log('🔐 No hay tokens almacenados');
+                return false;
+            }
+
+            const expiryTime = parseInt(storedExpiry);
+            const currentTime = Date.now();
+            const lastAuthTime = lastAuth ? parseInt(lastAuth) : 0;
+            
+            // ← NUEVO: Verificar si el token es muy viejo (más de 7 días)
+            const tokenAge = currentTime - lastAuthTime;
+            const maxAge = this.config.TOKEN_REFRESH_THRESHOLD || (7 * 24 * 60 * 60 * 1000);
+            
+            if (tokenAge > maxAge) {
+                console.log('🔐 Token muy antiguo, renovando...');
+                this.clearStoredToken();
+                return false;
+            }
+
+            // ← VERIFICAR: Si el token está cerca de expirar, renovarlo
+            const timeUntilExpiry = expiryTime - currentTime;
+            
+            if (timeUntilExpiry < 600000) { // Menos de 10 minutos
+                console.log('🔐 Token próximo a expirar, renovando...');
+                await this.refreshTokenSilently();
+                return true;
+            }
+
+            // Token válido
+            this.accessToken = storedToken;
+            this.tokenExpiryTime = expiryTime;
+            this.isSignedIn = true;
+
+            this.gapi.client.setToken({
+                access_token: this.accessToken
+            });
+
+            this.updateAuthStatus(true);
+            console.log('✅ Token recuperado exitosamente');
+            
+            return true;
+
+        } catch (error) {
+            console.log('⚠️ Error recuperando token:', error);
+            this.clearStoredToken();
+            return false;
+        }
+    }
+
+    // ← NUEVO: Refresh automático silencioso
+    async refreshTokenSilently() {
+        try {
+            console.log('🔄 Renovando token silenciosamente...');
+            
+            // Usar el método implícito de Google para renovar
+            if (!this.tokenClient) {
+                await this.initGoogleIdentity();
+            }
+
+            return new Promise((resolve) => {
+                this.tokenClient.callback = (response) => {
+                    if (response.error) {
+                        console.error('❌ Error renovando token:', response.error);
+                        resolve(false);
+                        return;
+                    }
+                    
+                    this.handleTokenResponse(response, true); // silent = true
+                    console.log('✅ Token renovado silenciosamente');
+                    resolve(true);
+                };
+
+                // Renovar sin mostrar popup si es posible
+                this.tokenClient.requestAccessToken({ 
+                    prompt: '', // ← Sin prompt para renovación silenciosa
+                    hint: localStorage.getItem(this.STORAGE_KEYS.USER_INFO) ? 
+                          JSON.parse(localStorage.getItem(this.STORAGE_KEYS.USER_INFO)).email : ''
+                });
+            });
+
+        } catch (error) {
+            console.error('❌ Error en refresh silencioso:', error);
+            return false;
+        }
+    }
+
+    // ← NUEVO: Configurar auto-refresh
+    setupAutoRefresh() {
+        // Limpiar timer anterior si existe
+        if (this.refreshTimer) {
+            clearInterval(this.refreshTimer);
+        }
+
+        // ← NUEVO: Timer que verifica cada 5 minutos
+        this.refreshTimer = setInterval(async () => {
+            if (this.isSignedIn && this.tokenExpiryTime) {
+                const timeLeft = this.tokenExpiryTime - Date.now();
+                
+                // Si quedan menos de 10 minutos, renovar
+                if (timeLeft < 600000 && timeLeft > 0) {
+                    console.log('⏰ Auto-renovando token...');
+                    await this.refreshTokenSilently();
+                }
+                // Si ya expiró, limpiar
+                else if (timeLeft <= 0) {
+                    console.log('⏰ Token expirado, requiere nueva autenticación');
+                    this.clearStoredToken();
+                    this.updateAuthStatus(false);
+                }
+            }
+        }, 5 * 60 * 1000); // Cada 5 minutos
     }
 
     async loadGoogleAPI() {
@@ -102,7 +234,7 @@ class DriveAuth {
                 this.tokenClient = google.accounts.oauth2.initTokenClient({
                     client_id: this.config.CLIENT_ID,
                     scope: this.config.SCOPES,
-                    callback: (response) => this.handleTokenResponse(response)
+                    callback: (response) => this.handleTokenResponse(response, false)
                 });
 
                 resolve();
@@ -148,11 +280,14 @@ class DriveAuth {
         }
     }
 
-    handleTokenResponse(response) {
+    // ← MODIFICADO: Handle token con opción silenciosa
+    handleTokenResponse(response, silent = false) {
         if (response.error !== undefined) {
             console.error('❌ Error OAuth:', response);
             this.isAuthenticating = false;
-            this.handleAuthError(response.error);
+            if (!silent) {
+                this.handleAuthError(response.error);
+            }
             return;
         }
         
@@ -167,7 +302,11 @@ class DriveAuth {
             access_token: this.accessToken
         });
         
-        this.onAuthSuccess();
+        if (!silent) {
+            this.onAuthSuccess();
+        } else {
+            this.updateAuthStatus(true);
+        }
     }
 
     async authenticate() {
@@ -180,6 +319,7 @@ class DriveAuth {
                 await this.init();
             }
 
+            // ← NUEVO: Primero intentar con token existente
             if (this.isSignedIn && this.accessToken && this.isTokenValid()) {
                 this.isAuthenticating = false;
                 this.onAuthSuccess();
@@ -190,7 +330,11 @@ class DriveAuth {
                 throw new Error('Token client no inicializado');
             }
 
-            this.tokenClient.requestAccessToken({ prompt: 'consent' });
+            // ← MODIFICADO: Auth más persistente
+            this.tokenClient.requestAccessToken({ 
+                prompt: 'consent',
+                include_granted_scopes: true
+            });
             
             return true;
 
@@ -205,17 +349,22 @@ class DriveAuth {
     isTokenValid() {
         if (!this.tokenExpiryTime) return false;
         const timeLeft = this.tokenExpiryTime - Date.now();
-        return timeLeft > 300000;
+        return timeLeft > 300000; // 5 minutos de margen
     }
 
+    // ← MODIFICADO: Almacenamiento mejorado
     storeToken(accessToken, expiresIn) {
         try {
             const expiryTime = Date.now() + (expiresIn * 1000);
+            const currentTime = Date.now();
             
             localStorage.setItem(this.STORAGE_KEYS.ACCESS_TOKEN, accessToken);
             localStorage.setItem(this.STORAGE_KEYS.EXPIRY_TIME, expiryTime.toString());
+            localStorage.setItem(this.STORAGE_KEYS.LAST_AUTH, currentTime.toString());
             
             this.tokenExpiryTime = expiryTime;
+            
+            console.log(`💾 Token almacenado, expira en ${Math.round(expiresIn/60)} minutos`);
             
         } catch (error) {
             console.error('❌ Error guardando token:', error);
@@ -224,13 +373,21 @@ class DriveAuth {
 
     clearStoredToken() {
         try {
-            localStorage.removeItem(this.STORAGE_KEYS.ACCESS_TOKEN);
-            localStorage.removeItem(this.STORAGE_KEYS.EXPIRY_TIME);
-            localStorage.removeItem(this.STORAGE_KEYS.USER_INFO);
+            Object.values(this.STORAGE_KEYS).forEach(key => {
+                localStorage.removeItem(key);
+            });
             
             this.accessToken = null;
             this.tokenExpiryTime = null;
             this.isSignedIn = false;
+            
+            // Limpiar timer
+            if (this.refreshTimer) {
+                clearInterval(this.refreshTimer);
+                this.refreshTimer = null;
+            }
+            
+            console.log('🗑️ Tokens limpiados');
             
         } catch (error) {
             console.error('❌ Error limpiando token:', error);
@@ -242,6 +399,9 @@ class DriveAuth {
             const userInfo = await this.getUserInfo();
             this.updateAuthStatus(true, userInfo);
             this.hideAuthButton();
+            
+            // ← NUEVO: Configurar refresh automático después de auth exitoso
+            this.setupAutoRefresh();
             
             window.dispatchEvent(new CustomEvent('driveAuthSuccess'));
             
@@ -313,7 +473,13 @@ class DriveAuth {
             if (isAuthenticated) {
                 authStatus.className = 'auth-status authenticated';
                 authIcon.textContent = '✅';
-                authText.textContent = userInfo ? userInfo.name : 'Conectado';
+                
+                const timeLeft = this.tokenExpiryTime ? 
+                    Math.round((this.tokenExpiryTime - Date.now()) / (1000 * 60 * 60)) : 0;
+                
+                authText.textContent = userInfo ? 
+                    `${userInfo.name} (${timeLeft}h)` : 
+                    `Conectado (${timeLeft}h)`;
             } else {
                 authStatus.className = 'auth-status not-authenticated';
                 authIcon.textContent = '❌';
@@ -337,7 +503,7 @@ class DriveAuth {
         if (statusPanel) {
             statusPanel.classList.remove('hidden');
             document.getElementById('status-title').textContent = 'Autorización Requerida';
-            document.getElementById('status-message').textContent = 'Haz clic en "Iniciar Sesión"';
+            document.getElementById('status-message').textContent = 'Autorizar una vez para acceso permanente';
         }
     }
 
@@ -377,6 +543,8 @@ class DriveAuth {
                 if (window.app && typeof window.app.onSignOut === 'function') {
                     window.app.onSignOut();
                 }
+                
+                console.log('👋 Sesión cerrada completamente');
             }
         } catch (error) {
             console.error('❌ Error cerrando sesión:', error);
@@ -391,10 +559,31 @@ class DriveAuth {
             tokenValid: this.isTokenValid(),
             isAuthenticating: this.isAuthenticating,
             hasTokenClient: !!this.tokenClient,
-            hasGapi: !!this.gapi
+            hasGapi: !!this.gapi,
+            tokenExpiresIn: this.tokenExpiryTime ? 
+                Math.round((this.tokenExpiryTime - Date.now()) / (1000 * 60)) : 0,
+            autoRefreshActive: !!this.refreshTimer
         };
+    }
+
+    // ← NUEVO: Método para forzar renovación
+    async forceRefresh() {
+        console.log('🔄 Forzando renovación de token...');
+        return await this.refreshTokenSilently();
+    }
+
+    // ← NUEVO: Cleanup al destruir
+    destroy() {
+        if (this.refreshTimer) {
+            clearInterval(this.refreshTimer);
+            this.refreshTimer = null;
+        }
+        
+        console.log('🧹 DriveAuth limpiado');
     }
 }
 
 // Exportar
 window.DriveAuth = DriveAuth;
+
+console.log('🔐 DriveAuth cargado: MODO PERMANENTE activado');
