@@ -1,6 +1,6 @@
 /**
  * MUSIC PDF MANAGER - GOOGLE DRIVE API CORREGIDO
- * Implementación con callbacks de autenticación corregidos
+ * Implementación con campos de API correctos
  */
 
 class DriveAPIGIS {
@@ -14,7 +14,7 @@ class DriveAPIGIS {
         this.initRetries = 0;
         this.maxRetries = 3;
         this.tokenExpiryTime = null;
-        this.isAuthenticating = false; // ✅ AGREGADO para evitar dobles autenticaciones
+        this.isAuthenticating = false;
         
         // Configuración de localStorage
         this.STORAGE_KEYS = {
@@ -263,7 +263,7 @@ class DriveAPIGIS {
     }
 
     /**
-     * Inicializa Google Identity Services (GIS) - CORREGIDO
+     * Inicializa Google Identity Services (GIS)
      */
     async initGoogleIdentity() {
         return new Promise((resolve, reject) => {
@@ -276,11 +276,11 @@ class DriveAPIGIS {
             }
 
             try {
-                // Crear token client para OAuth2 - CALLBACK CORREGIDO
+                // Crear token client para OAuth2
                 this.tokenClient = google.accounts.oauth2.initTokenClient({
                     client_id: this.config.CLIENT_ID,
                     scope: this.config.SCOPES,
-                    callback: (response) => this.handleTokenResponse(response) // ✅ MÉTODO DEDICADO
+                    callback: (response) => this.handleTokenResponse(response)
                 });
 
                 console.log('✅ Google Identity Services inicializado correctamente');
@@ -294,7 +294,7 @@ class DriveAPIGIS {
     }
 
     /**
-     * ✅ NUEVO: Maneja la respuesta del token de forma dedicada
+     * Maneja la respuesta del token de forma dedicada
      */
     handleTokenResponse(response) {
         console.log('🔄 Procesando respuesta de token...');
@@ -327,11 +327,11 @@ class DriveAPIGIS {
     }
 
     /**
-     * Autentica al usuario usando GIS - CORREGIDO
+     * Autentica al usuario usando GIS
      */
     async authenticate() {
         try {
-            // ✅ Evitar dobles autenticaciones
+            // Evitar dobles autenticaciones
             if (this.isAuthenticating) {
                 console.log('⚠️ Autenticación ya en progreso, ignorando...');
                 return false;
@@ -362,10 +362,9 @@ class DriveAPIGIS {
             // Solicitar autenticación
             console.log('🔑 Solicitando autorización del usuario...');
             
-            // ✅ Usar requestAccessToken directamente sin promesas adicionales
+            // Usar requestAccessToken directamente
             this.tokenClient.requestAccessToken({ prompt: 'consent' });
             
-            // ✅ El handleTokenResponse se encargará del resto
             return true;
 
         } catch (error) {
@@ -390,7 +389,7 @@ class DriveAPIGIS {
     }
 
     /**
-     * Maneja el éxito de autenticación - CORREGIDO
+     * Maneja el éxito de autenticación
      */
     async onAuthSuccess() {
         console.log('🎉 Autenticación completada exitosamente');
@@ -403,7 +402,7 @@ class DriveAPIGIS {
             // Ocultar botón de auth
             this.hideAuthButton();
             
-            // ✅ CRÍTICO: Disparar evento SOLO UNA VEZ
+            // Disparar evento
             console.log('📢 Disparando evento driveAuthSuccess...');
             window.dispatchEvent(new CustomEvent('driveAuthSuccess'));
             
@@ -422,19 +421,27 @@ class DriveAPIGIS {
     }
 
     /**
-     * Obtiene información del usuario autenticado
+     * Obtiene información del usuario autenticado - CORREGIDO
      */
     async getUserInfo() {
         try {
-            const response = await this.gapi.client.request({
-                path: 'https://www.googleapis.com/oauth2/v2/userinfo'
+            // ✅ URL CORREGIDA - usar la endpoint correcta
+            const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+                headers: {
+                    'Authorization': `Bearer ${this.accessToken}`
+                }
             });
-            
-            const userInfo = response.result;
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const userInfo = await response.json();
             
             // Guardar info del usuario
             localStorage.setItem(this.STORAGE_KEYS.USER_INFO, JSON.stringify(userInfo));
             
+            console.log('✅ Info del usuario obtenida:', userInfo.name);
             return userInfo;
             
         } catch (error) {
@@ -475,7 +482,7 @@ class DriveAPIGIS {
     }
 
     /**
-     * Obtiene archivos PDF de una carpeta específica
+     * Obtiene archivos PDF de una carpeta específica - CORREGIDO
      */
     async getFiles(folderType) {
         try {
@@ -509,10 +516,10 @@ class DriveAPIGIS {
             // Construir query para buscar PDFs
             const query = `'${folderId}' in parents and mimeType='application/pdf' and trashed=false`;
 
-            // Realizar petición
+            // ✅ CRÍTICO: Campos corregidos - SIN downloadUrl
             const response = await this.gapi.client.drive.files.list({
                 q: query,
-                fields: 'files(id,name,size,modifiedTime,webViewLink,thumbnailLink,parents,downloadUrl)',
+                fields: 'files(id,name,size,modifiedTime,webViewLink,thumbnailLink,parents)',
                 orderBy: this.config.ORDER_BY,
                 pageSize: this.config.MAX_RESULTS
             });
@@ -534,14 +541,37 @@ class DriveAPIGIS {
         } catch (error) {
             console.error(`❌ Error obteniendo archivos de ${folderType}:`, error);
             
-            // Si es un error de token, intentar limpiar
-            if (error.message.includes('401') || error.message.includes('token')) {
+            // ✅ Manejo de errores mejorado
+            if (error.status === 401 || (error.result && error.result.error && error.result.error.code === 401)) {
                 console.log('🔄 Token posiblemente inválido, limpiando...');
                 this.clearStoredToken();
                 this.updateAuthStatus(false);
+                throw new Error('Token de autenticación expirado. Por favor, inicia sesión nuevamente.');
             }
             
-            throw new Error(`No se pudieron cargar los archivos de ${folderType}: ${error.message}`);
+            // Manejo de otros errores específicos
+            let errorMessage = `No se pudieron cargar los archivos de ${folderType}`;
+            
+            if (error.result && error.result.error) {
+                const gError = error.result.error;
+                switch (gError.code) {
+                    case 400:
+                        errorMessage = `Error en la consulta a Google Drive: ${gError.message}`;
+                        break;
+                    case 403:
+                        errorMessage = `Sin permisos para acceder a la carpeta ${folderType}`;
+                        break;
+                    case 404:
+                        errorMessage = `Carpeta ${folderType} no encontrada. Verifica el ID de carpeta.`;
+                        break;
+                    default:
+                        errorMessage = `Error de Google Drive (${gError.code}): ${gError.message}`;
+                }
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+            
+            throw new Error(errorMessage);
         }
     }
 
@@ -557,7 +587,7 @@ class DriveAPIGIS {
     }
 
     /**
-     * Procesa un archivo de Google Drive
+     * Procesa un archivo de Google Drive - CORREGIDO
      */
     processFile(file) {
         return {
@@ -565,7 +595,7 @@ class DriveAPIGIS {
             name: file.name,
             size: this.formatFileSize(file.size),
             modifiedTime: file.modifiedTime,
-            downloadUrl: this.getDirectDownloadURL(file.id), // URL corregida
+            downloadUrl: this.getDirectDownloadURL(file.id), // ✅ Generar URL correcta
             webViewLink: file.webViewLink,
             thumbnailLink: file.thumbnailLink || null,
             mimeType: 'application/pdf'
@@ -573,19 +603,18 @@ class DriveAPIGIS {
     }
 
     /**
-     * Obtiene la URL directa de descarga para PDF.js
+     * Obtiene la URL directa de descarga para PDF.js - CORREGIDA
      */
     getDirectDownloadURL(fileId) {
-        // Usar la URL de export que permite CORS
-        return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${this.config.API_KEY}`;
+        // ✅ URL que funciona con autorización para PDFs privados
+        return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
     }
 
     /**
-     * Obtiene la URL de descarga con token de autorización
+     * Obtiene la URL de descarga con API Key (para archivos públicos)
      */
-    getAuthenticatedDownloadURL(fileId) {
-        // Esta URL requiere el header Authorization
-        return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+    getPublicDownloadURL(fileId) {
+        return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${this.config.API_KEY}`;
     }
 
     /**
@@ -593,7 +622,7 @@ class DriveAPIGIS {
      */
     async downloadFileBlob(fileId) {
         try {
-            const response = await fetch(this.getAuthenticatedDownloadURL(fileId), {
+            const response = await fetch(this.getDirectDownloadURL(fileId), {
                 headers: {
                     'Authorization': `Bearer ${this.accessToken}`
                 }
@@ -817,4 +846,4 @@ const DriveUtils = {
 window.DriveAPIGIS = DriveAPIGIS;
 window.DriveUtils = DriveUtils;
 
-console.log('🚀 Drive API GIS cargada: VERSIÓN CORREGIDA - CALLBACKS ARREGLADOS');
+console.log('🚀 Drive API GIS cargada: VERSIÓN CORREGIDA - API FIELDS ARREGLADOS');
