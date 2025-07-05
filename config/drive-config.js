@@ -1,28 +1,24 @@
 /**
- * MUSIC PDF MANAGER - DRIVE CONFIGURATION (CORREGIDA)
- * Configuración SOLO para Google Drive API - Con IDs corregidos
+ * MUSIC PDF MANAGER - DRIVE CONFIGURATION
+ * Configuración para Google Drive API - Versión optimizada
  */
 
 // === CONFIGURACIÓN DE GOOGLE DRIVE API ===
 const DRIVE_CONFIG = {
-    // Google Drive API Configuration
     API_KEY: 'AIzaSyBCckvzf00l5jUDfqOhjjt25qeqRa2CAeI',
     CLIENT_ID: '174351007107-7h8ud8a89u46cas99cidr9kc15kof02b.apps.googleusercontent.com',
     DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
     SCOPES: 'https://www.googleapis.com/auth/drive.readonly',
     
-    // IDs de carpetas CORREGIDOS (solo el ID, no la URL completa)
     FOLDERS: {
         INSTRUMENTOS: '1tdyXTT-p7ZV1eUcvfrcvjch0Y1yC-wpV',
         VOCES: '1joKAru0Z_jrgOracNjZzQZXbb2mpxCi7'
     },
     
-    // Configuración de archivos
     FILE_TYPES: ['pdf'],
     MAX_RESULTS: 100,
     ORDER_BY: 'name',
     
-    // URLs de verificación (para referencia únicamente)
     FOLDER_URLS: {
         INSTRUMENTOS: 'https://drive.google.com/drive/folders/1tdyXTT-p7ZV1eUcvfrcvjch0Y1yC-wpV',
         VOCES: 'https://drive.google.com/drive/folders/1joKAru0Z_jrgOracNjZzQZXbb2mpxCi7'
@@ -31,7 +27,6 @@ const DRIVE_CONFIG = {
 
 // === CONFIGURACIÓN DE LA APLICACIÓN ===
 const APP_CONFIG = {
-    // Configuración del visualizador PDF
     PDF_VIEWER: {
         DEFAULT_SCALE: 1.0,
         MIN_SCALE: 0.5,
@@ -39,7 +34,6 @@ const APP_CONFIG = {
         SCALE_STEP: 0.25
     },
     
-    // Configuración de búsqueda
     SEARCH: {
         MIN_QUERY_LENGTH: 2,
         DEBOUNCE_DELAY: 300,
@@ -47,14 +41,12 @@ const APP_CONFIG = {
         FUZZY_THRESHOLD: 0.6
     },
     
-    // Configuración de UI
     UI: {
         ANIMATION_DURATION: 300,
         LOADING_DELAY: 500,
         AUTO_SAVE_DELAY: 2000
     },
     
-    // Mensajes de la aplicación
     MESSAGES: {
         LOADING: 'Cargando archivos desde Google Drive...',
         AUTH_REQUIRED: 'Iniciando sesión con Google...',
@@ -69,16 +61,10 @@ const APP_CONFIG = {
 
 // === UTILIDADES DE CONFIGURACIÓN ===
 const ConfigUtils = {
-    /**
-     * SIEMPRE USAR GOOGLE DRIVE REAL - NO MÁS MODO DESARROLLO
-     */
     isDevelopmentMode() {
-        return false; // FORZAR SIEMPRE GOOGLE DRIVE REAL
+        return false;
     },
     
-    /**
-     * Verificar que las credenciales estén configuradas
-     */
     areCredentialsValid() {
         return !!(DRIVE_CONFIG.API_KEY && 
                  DRIVE_CONFIG.CLIENT_ID && 
@@ -86,14 +72,10 @@ const ConfigUtils = {
                  !DRIVE_CONFIG.CLIENT_ID.includes('YOUR_'));
     },
     
-    /**
-     * Verificar que los IDs de carpetas sean válidos
-     */
     areFolderIdsValid() {
         const instrumentosId = DRIVE_CONFIG.FOLDERS.INSTRUMENTOS;
         const vocesId = DRIVE_CONFIG.FOLDERS.VOCES;
         
-        // Verificar que no sean URLs
         const isValidId = (id) => {
             return id && 
                    typeof id === 'string' && 
@@ -105,22 +87,16 @@ const ConfigUtils = {
         return isValidId(instrumentosId) && isValidId(vocesId);
     },
     
-    /**
-     * Obtiene la configuración completa
-     */
     getConfig() {
         return {
             drive: DRIVE_CONFIG,
             app: APP_CONFIG,
-            isDev: false, // SIEMPRE FALSE
+            isDev: false,
             credentialsValid: this.areCredentialsValid(),
             folderIdsValid: this.areFolderIdsValid()
         };
     },
     
-    /**
-     * Formatea el tamaño de archivo
-     */
     formatFileSize(bytes) {
         if (!bytes) return 'N/A';
         const sizes = ['Bytes', 'KB', 'MB', 'GB'];
@@ -128,9 +104,6 @@ const ConfigUtils = {
         return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
     },
     
-    /**
-     * Formatea la fecha de modificación
-     */
     formatDate(dateString) {
         if (!dateString) return 'N/A';
         const date = new Date(dateString);
@@ -143,26 +116,11 @@ const ConfigUtils = {
         });
     },
     
-    /**
-     * Log de debug para Google Drive
-     */
     logDriveStatus() {
-        console.log('🔧 CONFIGURACIÓN GOOGLE DRIVE:');
-        console.log('📊 API Key válida:', !!DRIVE_CONFIG.API_KEY);
-        console.log('📊 Client ID válido:', !!DRIVE_CONFIG.CLIENT_ID);
-        console.log('📊 Credenciales válidas:', this.areCredentialsValid());
-        console.log('📊 IDs de carpetas válidos:', this.areFolderIdsValid());
-        console.log('📊 Modo desarrollo:', this.isDevelopmentMode());
-        console.log('📊 IDs de carpetas:', DRIVE_CONFIG.FOLDERS);
-        
-        // Debug adicional para verificar IDs
-        console.log('🔍 Debug de carpetas:');
-        console.log('  📁 Instrumentos ID:', DRIVE_CONFIG.FOLDERS.INSTRUMENTOS);
-        console.log('  📁 Voces ID:', DRIVE_CONFIG.FOLDERS.VOCES);
+        console.log('☁️ Google Drive API: CONFIGURADO');
         
         if (!this.areFolderIdsValid()) {
-            console.error('❌ ERROR: Los IDs de carpetas no son válidos');
-            console.error('💡 Asegúrate de usar solo el ID, no la URL completa');
+            console.error('❌ ERROR: IDs de carpetas no válidos');
         }
     }
 };
@@ -172,7 +130,6 @@ window.DRIVE_CONFIG = DRIVE_CONFIG;
 window.APP_CONFIG = APP_CONFIG;
 window.ConfigUtils = ConfigUtils;
 
-// Log inicial
 ConfigUtils.logDriveStatus();
 
-console.log('⚙️ Configuración cargada: SOLO GOOGLE DRIVE REAL - IDs CORREGIDOS');
+console.log('⚙️ Configuración cargada - Versión optimizada');

@@ -13,29 +13,21 @@ class DriveAPIGIS {
         this.maxRetries = 3;
     }
 
-    /**
-     * Inicializa Google API con módulos especializados
-     */
     async init() {
         try {
             if (this.isInitialized) return true;
 
-            console.log('☁️ Inicializando Google Drive API con módulos...');
-
-            // Verificar dependencias
             if (!window.DriveAuth || !window.DriveFiles) {
                 throw new Error('Módulos de Drive no cargados');
             }
 
-            // Inicializar módulos
             this.driveAuth = new DriveAuth(this.config);
             this.driveFiles = new DriveFiles(this.config, this.driveAuth);
 
-            // Inicializar autenticación
             await this.driveAuth.init();
 
             this.isInitialized = true;
-            console.log('✅ Google Drive API inicializada con módulos');
+            console.log('✅ Google Drive API inicializada');
 
             return true;
 
@@ -44,7 +36,6 @@ class DriveAPIGIS {
             
             if (this.initRetries < this.maxRetries) {
                 this.initRetries++;
-                console.log(`🔄 Reintentando (${this.initRetries}/${this.maxRetries})...`);
                 await new Promise(resolve => setTimeout(resolve, 2000));
                 return this.init();
             }
@@ -148,29 +139,12 @@ class DriveAPIGIS {
     // === MÉTODOS DE TESTING ===
 
     async testConnection() {
-        console.log('🧪 INICIANDO TEST DE CONEXIÓN...');
-        
         try {
-            // 1. Verificar configuración
-            console.log('1️⃣ Verificando configuración...');
-            const status = this.getConnectionStatus();
-            console.log('📊 Estado:', status);
-            
-            // 2. Inicializar
-            console.log('2️⃣ Inicializando...');
             await this.init();
-            
-            // 3. Autenticar
-            console.log('3️⃣ Autenticando...');
             await this.authenticate();
             
-            // 4. Probar acceso a carpetas
-            console.log('4️⃣ Probando carpetas...');
             const folderTests = await this.driveFiles.testFolderAccess();
-            console.log('📁 Resultados:', folderTests);
             
-            // 5. Probar carga de archivos
-            console.log('5️⃣ Probando archivos...');
             const files = await Promise.all([
                 this.getFiles('instrumentos'),
                 this.getFiles('voces')
@@ -199,25 +173,18 @@ class DriveAPIGIS {
 
 // === FUNCIÓN DE DEBUG MEJORADA ===
 window.debugDriveConnection = function() {
-    console.log('🔧 DEBUG DE CONEXIÓN A GOOGLE DRIVE:');
-    
     const driveAPI = window.AppState?.driveAPI;
     if (!driveAPI) {
         console.error('❌ DriveAPI no disponible');
         return;
     }
     
-    // Debug completo
     driveAPI.debugInfo();
     
-    // Test adicional si está autenticado
     if (driveAPI.isSignedIn) {
-        console.log('✅ Usuario autenticado - Probando descarga...');
-        
         const files = window.AppState?.files;
         if (files && files.instrumentos && files.instrumentos.length > 0) {
             const testFile = files.instrumentos[0];
-            console.log('🧪 Probando descarga:', testFile.name);
             
             driveAPI.downloadFileBlob(testFile.id)
                 .then(blob => {
@@ -235,4 +202,4 @@ window.debugDriveConnection = function() {
 // === EXPORTAR ===
 window.DriveAPIGIS = DriveAPIGIS;
 
-console.log('🚀 Drive API GIS cargada: VERSIÓN REFACTORIZADA - MÓDULOS SEPARADOS');
+console.log('🚀 Drive API GIS cargada - Versión optimizada');

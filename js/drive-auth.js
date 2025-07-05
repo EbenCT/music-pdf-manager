@@ -14,7 +14,6 @@ class DriveAuth {
         this.tokenExpiryTime = null;
         this.isAuthenticating = false;
         
-        // Configuración de localStorage
         this.STORAGE_KEYS = {
             ACCESS_TOKEN: 'gdrive_access_token',
             EXPIRY_TIME: 'gdrive_token_expiry',
@@ -22,30 +21,17 @@ class DriveAuth {
         };
     }
 
-    /**
-     * Inicializa Google API con Google Identity Services
-     */
     async init() {
         try {
             if (this.isInitialized) return true;
 
-            console.log('🔐 Inicializando autenticación Google Drive...');
-
-            // Verificar credenciales
             if (!this.config.API_KEY || !this.config.CLIENT_ID) {
                 throw new Error('Credenciales de Google Drive no configuradas');
             }
 
-            // Cargar GAPI
             await this.loadGoogleAPI();
-            
-            // Inicializar GAPI client
             await this.initGapiClient();
-            
-            // Inicializar Google Identity Services
             await this.initGoogleIdentity();
-            
-            // Verificar token guardado
             await this.checkStoredToken();
 
             this.isInitialized = true;
@@ -59,20 +45,14 @@ class DriveAuth {
         }
     }
 
-    /**
-     * Carga la librería GAPI
-     */
     async loadGoogleAPI() {
         return new Promise((resolve, reject) => {
             if (typeof gapi !== 'undefined' && gapi.load) {
                 this.gapi = gapi;
-                console.log('✅ Google API ya estaba cargado');
                 resolve();
                 return;
             }
 
-            console.log('📦 Cargando Google API library...');
-            
             const script = document.createElement('script');
             script.src = 'https://apis.google.com/js/api.js';
             script.async = true;
@@ -82,7 +62,6 @@ class DriveAuth {
                 setTimeout(() => {
                     if (typeof gapi !== 'undefined' && gapi.load) {
                         this.gapi = gapi;
-                        console.log('✅ Google API library cargada');
                         resolve();
                     } else {
                         reject(new Error('Google API no disponible'));
@@ -95,13 +74,8 @@ class DriveAuth {
         });
     }
 
-    /**
-     * Inicializa GAPI client
-     */
     async initGapiClient() {
         return new Promise((resolve, reject) => {
-            console.log('🔧 Inicializando GAPI client...');
-            
             this.gapi.load('client', async () => {
                 try {
                     await this.gapi.client.init({
@@ -109,7 +83,6 @@ class DriveAuth {
                         discoveryDocs: [this.config.DISCOVERY_DOC]
                     });
                     
-                    console.log('✅ GAPI client inicializado');
                     resolve();
                 } catch (error) {
                     reject(error);
@@ -118,13 +91,8 @@ class DriveAuth {
         });
     }
 
-    /**
-     * Inicializa Google Identity Services
-     */
     async initGoogleIdentity() {
         return new Promise((resolve, reject) => {
-            console.log('🔧 Inicializando Google Identity Services...');
-            
             if (typeof google === 'undefined' || !google.accounts) {
                 reject(new Error('Google Identity Services no cargado'));
                 return;
@@ -137,7 +105,6 @@ class DriveAuth {
                     callback: (response) => this.handleTokenResponse(response)
                 });
 
-                console.log('✅ Google Identity Services inicializado');
                 resolve();
                 
             } catch (error) {
@@ -146,9 +113,6 @@ class DriveAuth {
         });
     }
 
-    /**
-     * Verifica token almacenado
-     */
     async checkStoredToken() {
         try {
             const storedToken = localStorage.getItem(this.STORAGE_KEYS.ACCESS_TOKEN);
@@ -161,41 +125,30 @@ class DriveAuth {
             const expiryTime = parseInt(storedExpiry);
             const currentTime = Date.now();
             
-            // Verificar expiración (5 min de margen)
             if (currentTime >= (expiryTime - 300000)) {
-                console.log('⏰ Token expirado');
                 this.clearStoredToken();
                 return false;
             }
 
-            // Token válido
             this.accessToken = storedToken;
             this.tokenExpiryTime = expiryTime;
             this.isSignedIn = true;
 
-            // Configurar en GAPI
             this.gapi.client.setToken({
                 access_token: this.accessToken
             });
 
-            console.log('✅ Token válido restaurado');
             this.updateAuthStatus(true);
             
             return true;
 
         } catch (error) {
-            console.error('❌ Error verificando token:', error);
             this.clearStoredToken();
             return false;
         }
     }
 
-    /**
-     * Maneja respuesta del token
-     */
     handleTokenResponse(response) {
-        console.log('🔄 Procesando token...');
-        
         if (response.error !== undefined) {
             console.error('❌ Error OAuth:', response);
             this.isAuthenticating = false;
@@ -203,17 +156,13 @@ class DriveAuth {
             return;
         }
         
-        console.log('✅ Token obtenido');
-        
         this.accessToken = response.access_token;
         this.isSignedIn = true;
         this.isAuthenticating = false;
         
-        // Guardar token
         const expiresIn = response.expires_in || 3600;
         this.storeToken(response.access_token, expiresIn);
         
-        // Configurar en GAPI
         this.gapi.client.setToken({
             access_token: this.accessToken
         });
@@ -221,26 +170,17 @@ class DriveAuth {
         this.onAuthSuccess();
     }
 
-    /**
-     * Autentica usuario
-     */
     async authenticate() {
         try {
-            if (this.isAuthenticating) {
-                console.log('⚠️ Autenticación en progreso...');
-                return false;
-            }
+            if (this.isAuthenticating) return false;
 
-            console.log('🔐 Iniciando autenticación...');
             this.isAuthenticating = true;
 
             if (!this.isInitialized) {
                 await this.init();
             }
 
-            // Si ya autenticado y token válido
             if (this.isSignedIn && this.accessToken && this.isTokenValid()) {
-                console.log('✅ Ya autenticado');
                 this.isAuthenticating = false;
                 this.onAuthSuccess();
                 return true;
@@ -250,7 +190,6 @@ class DriveAuth {
                 throw new Error('Token client no inicializado');
             }
 
-            console.log('🔑 Solicitando autorización...');
             this.tokenClient.requestAccessToken({ prompt: 'consent' });
             
             return true;
@@ -263,18 +202,12 @@ class DriveAuth {
         }
     }
 
-    /**
-     * Verifica si token es válido
-     */
     isTokenValid() {
         if (!this.tokenExpiryTime) return false;
         const timeLeft = this.tokenExpiryTime - Date.now();
-        return timeLeft > 300000; // 5 minutos
+        return timeLeft > 300000;
     }
 
-    /**
-     * Guarda token
-     */
     storeToken(accessToken, expiresIn) {
         try {
             const expiryTime = Date.now() + (expiresIn * 1000);
@@ -283,16 +216,12 @@ class DriveAuth {
             localStorage.setItem(this.STORAGE_KEYS.EXPIRY_TIME, expiryTime.toString());
             
             this.tokenExpiryTime = expiryTime;
-            console.log('💾 Token guardado');
             
         } catch (error) {
             console.error('❌ Error guardando token:', error);
         }
     }
 
-    /**
-     * Limpia token
-     */
     clearStoredToken() {
         try {
             localStorage.removeItem(this.STORAGE_KEYS.ACCESS_TOKEN);
@@ -303,25 +232,17 @@ class DriveAuth {
             this.tokenExpiryTime = null;
             this.isSignedIn = false;
             
-            console.log('🗑️ Token limpiado');
-            
         } catch (error) {
             console.error('❌ Error limpiando token:', error);
         }
     }
 
-    /**
-     * Éxito de autenticación
-     */
     async onAuthSuccess() {
-        console.log('🎉 Autenticación exitosa');
-        
         try {
             const userInfo = await this.getUserInfo();
             this.updateAuthStatus(true, userInfo);
             this.hideAuthButton();
             
-            // Disparar evento
             window.dispatchEvent(new CustomEvent('driveAuthSuccess'));
             
             if (window.app && typeof window.app.onAuthSuccess === 'function') {
@@ -335,9 +256,6 @@ class DriveAuth {
         }
     }
 
-    /**
-     * Obtiene info del usuario
-     */
     async getUserInfo() {
         try {
             const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
@@ -353,22 +271,15 @@ class DriveAuth {
             const userInfo = await response.json();
             
             localStorage.setItem(this.STORAGE_KEYS.USER_INFO, JSON.stringify(userInfo));
-            console.log('✅ Info usuario:', userInfo.name);
             
             return userInfo;
             
         } catch (error) {
-            console.error('❌ Error info usuario:', error);
             return null;
         }
     }
 
-    /**
-     * Maneja errores de auth
-     */
     handleAuthError(error) {
-        console.error('❌ Error autenticación:', error);
-        
         let errorMessage = 'Error de autenticación desconocido';
         
         switch (error) {
@@ -393,9 +304,6 @@ class DriveAuth {
         }
     }
 
-    /**
-     * Actualiza estado de auth en UI
-     */
     updateAuthStatus(isAuthenticated, userInfo = null) {
         const authStatus = document.getElementById('auth-status');
         const authIcon = document.getElementById('auth-icon');
@@ -414,9 +322,6 @@ class DriveAuth {
         }
     }
 
-    /**
-     * Muestra botón de auth
-     */
     showAuthButton() {
         const button = document.getElementById('auth-button');
         if (button) {
@@ -436,9 +341,6 @@ class DriveAuth {
         }
     }
 
-    /**
-     * Oculta botón de auth
-     */
     hideAuthButton() {
         const button = document.getElementById('auth-button');
         if (button) button.style.display = 'none';
@@ -450,9 +352,6 @@ class DriveAuth {
         if (statusPanel) statusPanel.classList.add('hidden');
     }
 
-    /**
-     * Muestra error de auth
-     */
     showAuthError(message) {
         const statusPanel = document.getElementById('connection-status');
         if (statusPanel) {
@@ -465,9 +364,6 @@ class DriveAuth {
         }
     }
 
-    /**
-     * Cierra sesión
-     */
     async signOut() {
         try {
             if (this.accessToken) {
@@ -478,8 +374,6 @@ class DriveAuth {
                 this.updateAuthStatus(false);
                 this.showAuthButton();
                 
-                console.log('👋 Desconectado');
-                
                 if (window.app && typeof window.app.onSignOut === 'function') {
                     window.app.onSignOut();
                 }
@@ -489,9 +383,6 @@ class DriveAuth {
         }
     }
 
-    /**
-     * Estado de conexión
-     */
     getConnectionStatus() {
         return {
             isInitialized: this.isInitialized,

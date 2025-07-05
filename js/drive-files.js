@@ -9,39 +9,26 @@ class DriveFiles {
         this.driveAuth = driveAuth;
     }
 
-    /**
-     * Obtiene archivos PDF de una carpeta específica
-     */
     async getFiles(folderType) {
         try {
-            console.log(`📁 Obteniendo archivos de ${folderType}...`);
-
-            // Verificar autenticación
             if (!this.driveAuth.isSignedIn || !this.driveAuth.accessToken || !this.driveAuth.isTokenValid()) {
                 throw new Error('No autenticado o token expirado');
             }
 
-            // Obtener ID de carpeta
             const folderId = this.getFolderId(folderType);
             if (!folderId) {
                 throw new Error(`ID de carpeta no configurado para: ${folderType}`);
             }
 
-            console.log(`🔍 Buscando PDFs en ${folderType} (${folderId})...`);
-
-            // Verificar acceso a carpeta
             try {
                 await this.driveAuth.gapi.client.drive.files.get({
                     fileId: folderId,
                     fields: 'id,name'
                 });
-                console.log(`✅ Acceso confirmado a ${folderType}`);
             } catch (accessError) {
-                console.error(`❌ Sin acceso a ${folderType}:`, accessError);
                 throw new Error(`No tienes acceso a la carpeta ${folderType}`);
             }
 
-            // Buscar PDFs
             const query = `'${folderId}' in parents and mimeType='application/pdf' and trashed=false`;
 
             const response = await this.driveAuth.gapi.client.drive.files.list({
@@ -56,17 +43,12 @@ class DriveFiles {
             }
 
             const files = response.result.files || [];
-            console.log(`📊 ${files.length} archivos encontrados en ${folderType}`);
-
-            // Procesar archivos
             return files.map(file => this.processFile(file));
 
         } catch (error) {
             console.error(`❌ Error obteniendo archivos de ${folderType}:`, error);
             
-            // Manejo de errores específicos
             if (error.status === 401 || (error.result && error.result.error && error.result.error.code === 401)) {
-                console.log('🔄 Token inválido, limpiando...');
                 this.driveAuth.clearStoredToken();
                 this.driveAuth.updateAuthStatus(false);
                 throw new Error('Token expirado. Inicia sesión nuevamente.');
@@ -97,9 +79,6 @@ class DriveFiles {
         }
     }
 
-    /**
-     * Obtiene ID de carpeta según tipo
-     */
     getFolderId(folderType) {
         const folderMap = {
             'instrumentos': this.config.FOLDERS.INSTRUMENTOS,
@@ -108,9 +87,6 @@ class DriveFiles {
         return folderMap[folderType.toLowerCase()];
     }
 
-    /**
-     * Procesa archivo de Google Drive
-     */
     processFile(file) {
         return {
             id: file.id,
@@ -124,34 +100,20 @@ class DriveFiles {
         };
     }
 
-    /**
-     * URL directa de descarga - CORREGIDA para incluir API Key
-     */
     getDirectDownloadURL(fileId) {
-        // Para archivos privados con autenticación Bearer
         return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
     }
 
-    /**
-     * URL pública con API Key (para archivos públicos)
-     */
     getPublicDownloadURL(fileId) {
         return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${this.config.API_KEY}`;
     }
 
-    /**
-     * Descarga archivo como blob - CORREGIDA CON API KEY
-     */
     async downloadFileBlob(fileId) {
         try {
-            console.log('📥 Descargando archivo:', fileId);
-
-            // Verificar autenticación
             if (!this.driveAuth.isSignedIn || !this.driveAuth.accessToken) {
                 throw new Error('No hay sesión activa');
             }
 
-            // Primera opción: URL con autorización Bearer + API Key
             const authUrl = this.getDirectDownloadURL(fileId);
             
             try {
@@ -164,16 +126,12 @@ class DriveFiles {
 
                 if (authResponse.ok) {
                     const blob = await authResponse.blob();
-                    console.log('✅ Descarga con auth exitosa:', blob.size, 'bytes');
                     return blob;
                 }
-
-                console.log('⚠️ Auth falló, intentando método público...');
             } catch (authError) {
                 console.log('⚠️ Error con auth:', authError.message);
             }
 
-            // Segunda opción: URL pública con solo API Key
             const publicUrl = this.getPublicDownloadURL(fileId);
             
             try {
@@ -181,41 +139,31 @@ class DriveFiles {
                 
                 if (publicResponse.ok) {
                     const blob = await publicResponse.blob();
-                    console.log('✅ Descarga pública exitosa:', blob.size, 'bytes');
                     return blob;
                 }
-
-                console.log('⚠️ Descarga pública falló:', publicResponse.status);
             } catch (publicError) {
                 console.log('⚠️ Error descarga pública:', publicError.message);
             }
 
-            // Tercera opción: Usar GAPI client (más confiable)
             try {
-                console.log('🔄 Intentando con GAPI client...');
-                
                 const gapiResponse = await this.driveAuth.gapi.client.drive.files.get({
                     fileId: fileId,
                     alt: 'media'
                 });
 
                 if (gapiResponse.body) {
-                    // Convertir respuesta a blob
                     const blob = new Blob([gapiResponse.body], { type: 'application/pdf' });
-                    console.log('✅ Descarga con GAPI exitosa:', blob.size, 'bytes');
                     return blob;
                 }
             } catch (gapiError) {
                 console.log('⚠️ Error con GAPI:', gapiError.message);
             }
 
-            // Si todo falla, lanzar error específico
             throw new Error('No se pudo descargar el archivo. Verifica que el archivo sea público o que tengas permisos de acceso.');
 
         } catch (error) {
             console.error('❌ Error descargando archivo:', error);
             
-            // Proporcionar error más específico
             if (error.message.includes('403')) {
                 throw new Error('Sin permisos para acceder al archivo. Verifica que sea público o que tengas acceso.');
             } else if (error.message.includes('404')) {
@@ -228,9 +176,6 @@ class DriveFiles {
         }
     }
 
-    /**
-     * Obtiene metadata de archivo
-     */
     async getFileMetadata(fileId) {
         try {
             const response = await this.driveAuth.gapi.client.drive.files.get({
@@ -246,9 +191,6 @@ class DriveFiles {
         }
     }
 
-    /**
-     * Busca archivos por nombre
-     */
     async searchFiles(query, folderType = null) {
         try {
             let searchQuery = `mimeType='application/pdf' and trashed=false and name contains '${query}'`;
@@ -275,9 +217,6 @@ class DriveFiles {
         }
     }
 
-    /**
-     * Verifica si archivo existe
-     */
     async fileExists(fileName, folderType) {
         try {
             const folderId = this.getFolderId(folderType);
@@ -298,16 +237,10 @@ class DriveFiles {
         }
     }
 
-    /**
-     * Obtiene URL de vista previa
-     */
     getPreviewUrl(fileId) {
         return `https://drive.google.com/file/d/${fileId}/preview`;
     }
 
-    /**
-     * Formatea tamaño de archivo
-     */
     formatFileSize(bytes) {
         if (!bytes) return 'N/A';
         
@@ -318,9 +251,6 @@ class DriveFiles {
         return `${size} ${sizes[i]}`;
     }
 
-    /**
-     * Test de conexión a carpetas
-     */
     async testFolderAccess() {
         const results = {};
         
@@ -336,25 +266,18 @@ class DriveFiles {
                     folderId: folderId
                 };
                 
-                console.log(`✅ Acceso OK a ${folderType}`);
-                
             } catch (error) {
                 results[folderType.toLowerCase()] = {
                     accessible: false,
                     error: error.message,
                     folderId: folderId
                 };
-                
-                console.error(`❌ Sin acceso a ${folderType}:`, error);
             }
         }
         
         return results;
     }
 
-    /**
-     * Lista carpetas disponibles (para debugging)
-     */
     async listAvailableFolders() {
         try {
             const response = await this.driveAuth.gapi.client.drive.files.list({
@@ -364,7 +287,6 @@ class DriveFiles {
                 pageSize: 50
             });
 
-            console.log('📁 Carpetas disponibles:');
             response.result.files.forEach(folder => {
                 console.log(`  ${folder.name} (${folder.id})`);
             });
