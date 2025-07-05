@@ -1,6 +1,6 @@
 /**
- * MUSIC PDF MANAGER - MAIN APPLICATION SCRIPT CORREGIDO
- * Script principal con persistencia de autenticación y manejo mejorado
+ * MUSIC PDF MANAGER - MAIN APPLICATION SCRIPT
+ * Versión corregida con manejo de eventos mejorado
  */
 
 // === ESTADO GLOBAL DE LA APLICACIÓN ===
@@ -20,13 +20,15 @@ const AppState = {
     pdfViewer: null,
     driveAPI: null,
     isAuthenticated: false,
-    lastAuthCheck: null
+    lastAuthCheck: null,
+    isLoadingFiles: false // ✅ AGREGADO para evitar cargas múltiples
 };
 
 // === CONTROLADOR PRINCIPAL DE LA APLICACIÓN ===
 class MusicPDFManager {
     constructor() {
         this.config = ConfigUtils.getConfig();
+        this.authEventHandled = false; // ✅ AGREGADO para evitar múltiples handlers
         this.init();
     }
 
@@ -99,8 +101,9 @@ class MusicPDFManager {
             
             // Si el DriveAPI ya detectó un token válido durante init
             if (this.driveAPI.isSignedIn && this.driveAPI.isTokenValid()) {
-                console.log('✅ Token válido encontrado, cargando archivos...');
+                console.log('✅ Token válido encontrado, cargando archivos automáticamente...');
                 AppState.isAuthenticated = true;
+                this.driveAPI.updateAuthStatus(true);
                 await this.loadFiles();
                 return;
             }
@@ -124,7 +127,7 @@ class MusicPDFManager {
     }
 
     /**
-     * Configura todos los event listeners
+     * Configura todos los event listeners - CORREGIDO
      */
     setupEventListeners() {
         // Navigation tabs
@@ -144,13 +147,40 @@ class MusicPDFManager {
         if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => this.zoomOut());
         if (fullscreenBtn) fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
 
-        // Escuchar eventos de autenticación
-        window.addEventListener('driveAuthSuccess', () => {
-            this.onAuthSuccess();
-        });
+        // ✅ CRÍTICO: Escuchar evento de autenticación SOLO UNA VEZ
+        this.setupAuthEventListener();
 
         // Verificar periódicamente el estado del token
         this.startTokenValidationTimer();
+    }
+
+    /**
+     * ✅ NUEVO: Configura el listener de autenticación de forma segura
+     */
+    setupAuthEventListener() {
+        if (this.authEventHandled) {
+            console.log('⚠️ Event listener de auth ya configurado, saltando...');
+            return;
+        }
+
+        console.log('🔧 Configurando event listener de autenticación...');
+        
+        const authHandler = (event) => {
+            console.log('📢 Evento driveAuthSuccess recibido');
+            
+            // Prevenir múltiples ejecuciones
+            if (AppState.isLoadingFiles) {
+                console.log('⚠️ Ya se están cargando archivos, ignorando evento...');
+                return;
+            }
+
+            this.onAuthSuccess();
+        };
+
+        window.addEventListener('driveAuthSuccess', authHandler, { once: false });
+        this.authEventHandled = true;
+        
+        console.log('✅ Event listener de autenticación configurado');
     }
 
     /**
@@ -173,6 +203,7 @@ class MusicPDFManager {
      */
     handleTokenExpired() {
         AppState.isAuthenticated = false;
+        AppState.isLoadingFiles = false;
         this.driveAPI.clearStoredToken();
         this.driveAPI.updateAuthStatus(false);
         this.showAuthRequired();
@@ -214,9 +245,16 @@ class MusicPDFManager {
     }
 
     /**
-     * Carga archivos desde Google Drive
+     * Carga archivos desde Google Drive - CORREGIDO
      */
     async loadFiles() {
+        // ✅ Prevenir carga múltiple
+        if (AppState.isLoadingFiles) {
+            console.log('⚠️ Ya se están cargando archivos, ignorando...');
+            return;
+        }
+
+        AppState.isLoadingFiles = true;
         this.showLoading(true, 'Cargando archivos PDF desde Google Drive...');
         
         try {
@@ -251,12 +289,13 @@ class MusicPDFManager {
             this.updateFileCounts();
             this.updateUI('files-loaded');
 
-            console.log(`📊 Archivos cargados: ${AppState.files.instrumentos.length} instrumentos, ${AppState.files.voces.length} voces`);
+            console.log(`📊 Archivos cargados exitosamente: ${AppState.files.instrumentos.length} instrumentos, ${AppState.files.voces.length} voces`);
 
         } catch (error) {
             console.error('❌ Error cargando archivos:', error);
             this.showDriveError(error.message);
         } finally {
+            AppState.isLoadingFiles = false;
             this.showLoading(false);
         }
     }
@@ -315,12 +354,25 @@ class MusicPDFManager {
     }
 
     /**
-     * Maneja el éxito de autenticación
+     * Maneja el éxito de autenticación - CORREGIDO
      */
     async onAuthSuccess() {
-        console.log('🎉 Autenticación exitosa, cargando archivos...');
+        console.log('🎉 Procesando éxito de autenticación...');
+        
+        // ✅ Evitar procesamiento múltiple
+        if (AppState.isLoadingFiles) {
+            console.log('⚠️ Ya se están procesando archivos, ignorando...');
+            return;
+        }
+
         AppState.isAuthenticated = true;
-        await this.loadFiles();
+        
+        try {
+            await this.loadFiles();
+        } catch (error) {
+            console.error('❌ Error cargando archivos después de auth:', error);
+            this.showDriveError(`Error cargando archivos: ${error.message}`);
+        }
     }
 
     /**
@@ -330,6 +382,7 @@ class MusicPDFManager {
         console.error('❌ Error de autenticación:', errorMessage);
         this.showAuthError(errorMessage);
         AppState.isAuthenticated = false;
+        AppState.isLoadingFiles = false;
     }
 
     /**
@@ -338,6 +391,7 @@ class MusicPDFManager {
     onSignOut() {
         console.log('👋 Usuario cerró sesión');
         AppState.isAuthenticated = false;
+        AppState.isLoadingFiles = false;
         AppState.files = { instrumentos: [], voces: [] };
         AppState.filteredFiles = { instrumentos: [], voces: [] };
         
@@ -380,6 +434,7 @@ class MusicPDFManager {
         try {
             // Limpiar estado previo
             AppState.isAuthenticated = false;
+            AppState.isLoadingFiles = false;
             
             // Reinicializar API
             await this.initializeDriveAPI();
@@ -607,6 +662,7 @@ class MusicPDFManager {
         if (!AppState.isAuthenticated) {
             await this.retryConnection();
         } else {
+            AppState.isLoadingFiles = false; // Reset flag
             await this.loadFiles();
         }
     }
@@ -809,7 +865,12 @@ window.debugAppState = function() {
         instrumentos: AppState.files.instrumentos.length,
         voces: AppState.files.voces.length
     });
+    console.log('📊 Estado de carga:', {
+        isAuthenticated: AppState.isAuthenticated,
+        isLoadingFiles: AppState.isLoadingFiles,
+        authEventHandled: window.app?.authEventHandled
+    });
 };
 
-console.log('🚀 Main.js cargado: VERSIÓN CORREGIDA con persistencia de autenticación');
+console.log('🚀 Main.js cargado: VERSIÓN CORREGIDA - Event handling arreglado');
 console.log('🔧 Funciones de debug disponibles: debugAppState(), debugDriveConnection()');

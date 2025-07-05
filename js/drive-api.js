@@ -1,6 +1,6 @@
 /**
- * MUSIC PDF MANAGER - GOOGLE DRIVE API con Google Identity Services (GIS)
- * Implementación CORREGIDA con persistencia de tokens y URLs de descarga
+ * MUSIC PDF MANAGER - GOOGLE DRIVE API CORREGIDO
+ * Implementación con callbacks de autenticación corregidos
  */
 
 class DriveAPIGIS {
@@ -14,6 +14,7 @@ class DriveAPIGIS {
         this.initRetries = 0;
         this.maxRetries = 3;
         this.tokenExpiryTime = null;
+        this.isAuthenticating = false; // ✅ AGREGADO para evitar dobles autenticaciones
         
         // Configuración de localStorage
         this.STORAGE_KEYS = {
@@ -126,7 +127,7 @@ class DriveAPIGIS {
             
             this.tokenExpiryTime = expiryTime;
             
-            console.log('💾 Token guardado en localStorage');
+            console.log('💾 Token guardado en localStorage, expira en:', new Date(expiryTime));
             
         } catch (error) {
             console.error('❌ Error guardando token:', error);
@@ -262,7 +263,7 @@ class DriveAPIGIS {
     }
 
     /**
-     * Inicializa Google Identity Services (GIS)
+     * Inicializa Google Identity Services (GIS) - CORREGIDO
      */
     async initGoogleIdentity() {
         return new Promise((resolve, reject) => {
@@ -275,32 +276,11 @@ class DriveAPIGIS {
             }
 
             try {
-                // Crear token client para OAuth2
+                // Crear token client para OAuth2 - CALLBACK CORREGIDO
                 this.tokenClient = google.accounts.oauth2.initTokenClient({
                     client_id: this.config.CLIENT_ID,
                     scope: this.config.SCOPES,
-                    callback: (response) => {
-                        if (response.error !== undefined) {
-                            console.error('❌ Error en callback de OAuth:', response);
-                            this.handleAuthError(response.error);
-                            return;
-                        }
-                        
-                        console.log('✅ Token de acceso obtenido exitosamente');
-                        this.accessToken = response.access_token;
-                        this.isSignedIn = true;
-                        
-                        // Guardar token (expires_in viene en segundos)
-                        const expiresIn = response.expires_in || 3600; // Default 1 hora
-                        this.storeToken(response.access_token, expiresIn);
-                        
-                        // Configurar token en GAPI
-                        this.gapi.client.setToken({
-                            access_token: this.accessToken
-                        });
-                        
-                        this.onAuthSuccess();
-                    }
+                    callback: (response) => this.handleTokenResponse(response) // ✅ MÉTODO DEDICADO
                 });
 
                 console.log('✅ Google Identity Services inicializado correctamente');
@@ -314,11 +294,51 @@ class DriveAPIGIS {
     }
 
     /**
-     * Autentica al usuario usando GIS
+     * ✅ NUEVO: Maneja la respuesta del token de forma dedicada
+     */
+    handleTokenResponse(response) {
+        console.log('🔄 Procesando respuesta de token...');
+        
+        if (response.error !== undefined) {
+            console.error('❌ Error en callback de OAuth:', response);
+            this.isAuthenticating = false;
+            this.handleAuthError(response.error);
+            return;
+        }
+        
+        console.log('✅ Token de acceso obtenido exitosamente');
+        
+        // Guardar token y estado
+        this.accessToken = response.access_token;
+        this.isSignedIn = true;
+        this.isAuthenticating = false;
+        
+        // Guardar token (expires_in viene en segundos)
+        const expiresIn = response.expires_in || 3600; // Default 1 hora
+        this.storeToken(response.access_token, expiresIn);
+        
+        // Configurar token en GAPI
+        this.gapi.client.setToken({
+            access_token: this.accessToken
+        });
+        
+        // Ejecutar callback de éxito
+        this.onAuthSuccess();
+    }
+
+    /**
+     * Autentica al usuario usando GIS - CORREGIDO
      */
     async authenticate() {
         try {
+            // ✅ Evitar dobles autenticaciones
+            if (this.isAuthenticating) {
+                console.log('⚠️ Autenticación ya en progreso, ignorando...');
+                return false;
+            }
+
             console.log('🔐 Iniciando proceso de autenticación con GIS...');
+            this.isAuthenticating = true;
 
             // Asegurar que esté inicializado
             if (!this.isInitialized) {
@@ -328,42 +348,29 @@ class DriveAPIGIS {
             // Si ya está autenticado y el token es válido, usar ese
             if (this.isSignedIn && this.accessToken && this.isTokenValid()) {
                 console.log('✅ Usuario ya está autenticado con token válido');
+                this.isAuthenticating = false;
                 this.onAuthSuccess();
                 return true;
             }
 
             // Verificar que tokenClient esté disponible
             if (!this.tokenClient) {
+                this.isAuthenticating = false;
                 throw new Error('Google Identity Services no está inicializado correctamente');
             }
 
             // Solicitar autenticación
             console.log('🔑 Solicitando autorización del usuario...');
             
-            return new Promise((resolve, reject) => {
-                // Configurar callbacks temporales
-                const originalCallback = this.tokenClient.callback;
-                
-                this.tokenClient.callback = (response) => {
-                    // Restaurar callback original
-                    this.tokenClient.callback = originalCallback;
-                    
-                    if (response.error !== undefined) {
-                        console.error('❌ Error de autenticación:', response);
-                        reject(new Error(`Error de autenticación: ${response.error}`));
-                        return;
-                    }
-                    
-                    console.log('✅ Autenticación exitosa');
-                    resolve(true);
-                };
-                
-                // Solicitar token
-                this.tokenClient.requestAccessToken({ prompt: 'consent' });
-            });
+            // ✅ Usar requestAccessToken directamente sin promesas adicionales
+            this.tokenClient.requestAccessToken({ prompt: 'consent' });
+            
+            // ✅ El handleTokenResponse se encargará del resto
+            return true;
 
         } catch (error) {
             console.error('❌ Error en autenticación:', error);
+            this.isAuthenticating = false;
             this.updateAuthStatus(false);
             throw new Error(`Autenticación fallida: ${error.message}`);
         }
@@ -383,7 +390,7 @@ class DriveAPIGIS {
     }
 
     /**
-     * Maneja el éxito de autenticación
+     * Maneja el éxito de autenticación - CORREGIDO
      */
     async onAuthSuccess() {
         console.log('🎉 Autenticación completada exitosamente');
@@ -396,17 +403,21 @@ class DriveAPIGIS {
             // Ocultar botón de auth
             this.hideAuthButton();
             
-            // Notificar al app principal
+            // ✅ CRÍTICO: Disparar evento SOLO UNA VEZ
+            console.log('📢 Disparando evento driveAuthSuccess...');
+            window.dispatchEvent(new CustomEvent('driveAuthSuccess'));
+            
+            // Notificar al app principal si existe
             if (window.app && typeof window.app.onAuthSuccess === 'function') {
                 window.app.onAuthSuccess();
             }
             
-            // Trigger evento personalizado
-            window.dispatchEvent(new CustomEvent('driveAuthSuccess'));
-            
         } catch (error) {
             console.error('❌ Error obteniendo info del usuario:', error);
             this.updateAuthStatus(true); // Aún mostrar como autenticado
+            
+            // Disparar evento aunque falle la info del usuario
+            window.dispatchEvent(new CustomEvent('driveAuthSuccess'));
         }
     }
 
@@ -685,6 +696,7 @@ class DriveAPIGIS {
             isSignedIn: this.isSignedIn,
             hasAccessToken: !!this.accessToken,
             tokenValid: this.isTokenValid(),
+            isAuthenticating: this.isAuthenticating,
             hasTokenClient: !!this.tokenClient,
             hasGapi: !!this.gapi,
             config: {
@@ -706,6 +718,7 @@ class DriveAPIGIS {
                 
                 // Limpiar estado
                 this.clearStoredToken();
+                this.isAuthenticating = false;
                 
                 // Limpiar token de GAPI
                 this.gapi.client.setToken(null);
@@ -804,4 +817,4 @@ const DriveUtils = {
 window.DriveAPIGIS = DriveAPIGIS;
 window.DriveUtils = DriveUtils;
 
-console.log('🚀 Drive API GIS cargada: VERSIÓN CORREGIDA con persistencia y URLs directas');
+console.log('🚀 Drive API GIS cargada: VERSIÓN CORREGIDA - CALLBACKS ARREGLADOS');
