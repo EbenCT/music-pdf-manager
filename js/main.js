@@ -639,10 +639,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (typeof DriveAPIGIS === 'undefined') {
-        console.error('❌ DriveAPIGIS no está disponible - verificar que js/drive-api-gis.js esté cargado');
+        console.error('❌ DriveAPIGIS no está disponible - verificar que js/drive-api.js esté cargado');
         console.error('📋 Archivos requeridos:');
         console.error('  - config/drive-config.js:', typeof ConfigUtils !== 'undefined' ? '✅' : '❌');
-        console.error('  - js/drive-api-gis.js:', typeof DriveAPIGIS !== 'undefined' ? '✅' : '❌');
+        console.error('  - js/drive-api.js:', typeof DriveAPIGIS !== 'undefined' ? '✅' : '❌');
         console.error('  - js/pdf-viewer.js:', typeof PDFViewer !== 'undefined' ? '✅' : '❌');
         console.error('  - js/search.js:', typeof SearchManager !== 'undefined' ? '✅' : '❌');
         
@@ -651,11 +651,11 @@ document.addEventListener('DOMContentLoaded', () => {
             <div style="text-align: center; padding: var(--spacing-xxl); color: var(--accent-red);">
                 <div style="font-size: 4rem; margin-bottom: var(--spacing-lg);">📄</div>
                 <h2>Error de Archivos JavaScript</h2>
-                <p style="margin-bottom: var(--spacing-lg);">El archivo js/drive-api-gis.js no está disponible</p>
+                <p style="margin-bottom: var(--spacing-lg);">El archivo js/drive-api.js no está disponible</p>
                 <div style="background: var(--dark-gray); padding: var(--spacing-lg); border-radius: var(--radius-md); max-width: 600px; margin: 0 auto;">
                     <h3 style="color: var(--text-primary); margin-bottom: var(--spacing-md);">Pasos para solucionar:</h3>
                     <ol style="text-align: left; color: var(--text-secondary);">
-                        <li>Crear el archivo js/drive-api-gis.js en tu proyecto</li>
+                        <li>Crear el archivo js/drive-api.js en tu proyecto</li>
                         <li>Verificar que el archivo se subió correctamente al servidor</li>
                         <li>Comprobar configuración MIME types en render.yaml</li>
                         <li>Recargar la página</li>
