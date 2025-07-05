@@ -30,6 +30,20 @@ class MusicPDFManager {
     }
 
     /**
+     * Intenta autenticación automática sin bloquear la UI
+     */
+    async tryAutoAuthentication() {
+        try {
+            console.log('🔄 Intentando autenticación automática...');
+            await this.driveAPI.authenticate();
+            // Si llega aquí, la autenticación fue exitosa automáticamente
+        } catch (error) {
+            console.log('⚠️ Autenticación automática no disponible, esperando interacción del usuario');
+            // No hacer nada, el usuario tendrá que hacer click en el botón de auth
+        }
+    }
+
+    /**
      * Inicializa la aplicación
      */
     async init() {
@@ -57,10 +71,11 @@ class MusicPDFManager {
             // Inicializar Google Drive API con GIS
             await this.initializeDriveAPI();
             
-            // Intentar cargar archivos
-            await this.loadFiles();
+            // NO cargar archivos automáticamente - esperar autenticación del usuario
+            console.log('✅ Aplicación lista. Esperando autenticación del usuario...');
             
-            console.log('✅ Aplicación iniciada correctamente');
+            // Intentar autenticación automática (no bloqueante)
+            this.tryAutoAuthentication();
             
         } catch (error) {
             console.error('❌ Error al inicializar la aplicación:', error);
@@ -163,23 +178,31 @@ class MusicPDFManager {
                 throw new Error('Google Drive API no está inicializada');
             }
 
-            // Mostrar mensaje de autenticación si es necesario
-            if (!AppState.isAuthenticated) {
-                this.showLoading(true, 'Autenticando con Google...');
+            // SOLO cargar archivos si ya está autenticado
+            if (!AppState.isAuthenticated || !this.driveAPI.isSignedIn) {
+                console.log('⚠️ Usuario no autenticado, esperando autenticación...');
+                this.showLoading(false);
                 
-                // Intentar autenticación automática
+                // Intentar autenticación
                 try {
                     await this.driveAPI.authenticate();
+                    // Si llega aquí, la autenticación fue exitosa
+                    // onAuthSuccess() se llamará automáticamente y volverá a llamar loadFiles()
+                    return;
                 } catch (authError) {
                     console.log('⚠️ Autenticación manual requerida:', authError.message);
                     this.showLoading(false);
-                    // La UI de autenticación se manejará por el DriveAPI
                     return;
                 }
             }
 
-            // Cargar ambas carpetas en paralelo
+            // Cargar ambas carpetas en paralelo SOLO si está autenticado
             this.showLoading(true, 'Cargando archivos PDF...');
+            
+            console.log('📋 Estado de autenticación:');
+            console.log('  - isSignedIn:', this.driveAPI.isSignedIn);
+            console.log('  - hasAccessToken:', !!this.driveAPI.accessToken);
+            console.log('  - appAuthenticated:', AppState.isAuthenticated);
             
             const [instrumentosFiles, vocesFiles] = await Promise.all([
                 this.driveAPI.getFiles('instrumentos'),
@@ -616,7 +639,33 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (typeof DriveAPIGIS === 'undefined') {
-        console.error('❌ DriveAPIGIS no está disponible');
+        console.error('❌ DriveAPIGIS no está disponible - verificar que js/drive-api-gis.js esté cargado');
+        console.error('📋 Archivos requeridos:');
+        console.error('  - config/drive-config.js:', typeof ConfigUtils !== 'undefined' ? '✅' : '❌');
+        console.error('  - js/drive-api-gis.js:', typeof DriveAPIGIS !== 'undefined' ? '✅' : '❌');
+        console.error('  - js/pdf-viewer.js:', typeof PDFViewer !== 'undefined' ? '✅' : '❌');
+        console.error('  - js/search.js:', typeof SearchManager !== 'undefined' ? '✅' : '❌');
+        
+        // Mostrar error en la UI
+        document.querySelector('.main-content').innerHTML = `
+            <div style="text-align: center; padding: var(--spacing-xxl); color: var(--accent-red);">
+                <div style="font-size: 4rem; margin-bottom: var(--spacing-lg);">📄</div>
+                <h2>Error de Archivos JavaScript</h2>
+                <p style="margin-bottom: var(--spacing-lg);">El archivo js/drive-api-gis.js no está disponible</p>
+                <div style="background: var(--dark-gray); padding: var(--spacing-lg); border-radius: var(--radius-md); max-width: 600px; margin: 0 auto;">
+                    <h3 style="color: var(--text-primary); margin-bottom: var(--spacing-md);">Pasos para solucionar:</h3>
+                    <ol style="text-align: left; color: var(--text-secondary);">
+                        <li>Crear el archivo js/drive-api-gis.js en tu proyecto</li>
+                        <li>Verificar que el archivo se subió correctamente al servidor</li>
+                        <li>Comprobar configuración MIME types en render.yaml</li>
+                        <li>Recargar la página</li>
+                    </ol>
+                </div>
+                <button class="btn" onclick="location.reload()" style="margin-top: var(--spacing-lg);">
+                    🔄 Reintentar
+                </button>
+            </div>
+        `;
         return;
     }
 
@@ -628,3 +677,145 @@ document.addEventListener('DOMContentLoaded', () => {
 window.AppState = AppState;
 
 console.log('🚀 Main.js cargado: GOOGLE DRIVE con Google Identity Services');
+// ===== SCRIPT DE DEBUG TEMPORAL =====
+// Agregar al final de main.js para diagnosticar problemas
+
+// Debug detallado después de autenticación
+window.addEventListener('driveAuthSuccess', function() {
+    console.log('🎉 Evento driveAuthSuccess recibido');
+    
+    setTimeout(() => {
+        console.log('🔍 DEBUG POST-AUTENTICACIÓN:');
+        console.log('📊 Estado AppState:', {
+            isAuthenticated: window.AppState?.isAuthenticated,
+            currentModule: window.AppState?.currentModule,
+            files: {
+                instrumentos: window.AppState?.files?.instrumentos?.length || 0,
+                voces: window.AppState?.files?.voces?.length || 0
+            }
+        });
+        
+        console.log('📊 Estado DriveAPI:', {
+            isInitialized: window.AppState?.driveAPI?.isInitialized,
+            isSignedIn: window.AppState?.driveAPI?.isSignedIn,
+            hasAccessToken: !!window.AppState?.driveAPI?.accessToken
+        });
+        
+        console.log('📊 Configuración:', {
+            folderIds: window.DRIVE_CONFIG?.FOLDERS,
+            folderIdsValid: window.ConfigUtils?.areFolderIdsValid()
+        });
+        
+        // Verificar elementos de UI
+        const instrumentosCount = document.getElementById('instrumentos-count')?.textContent;
+        const vocesCount = document.getElementById('voces-count')?.textContent;
+        
+        console.log('📊 Estado UI:', {
+            instrumentosCount,
+            vocesCount,
+            currentPDFTitle: document.getElementById('current-pdf-title')?.textContent
+        });
+        
+        // Test manual de carga de archivos
+        if (window.app && window.app.driveAPI && window.app.driveAPI.isSignedIn) {
+            console.log('🧪 Probando carga manual de archivos...');
+            
+            window.app.driveAPI.getFiles('instrumentos')
+                .then(files => {
+                    console.log('✅ Test instrumentos exitoso:', files.length, 'archivos');
+                    console.log('📋 Primeros archivos:', files.slice(0, 3));
+                })
+                .catch(error => {
+                    console.error('❌ Test instrumentos falló:', error);
+                });
+                
+            window.app.driveAPI.getFiles('voces')
+                .then(files => {
+                    console.log('✅ Test voces exitoso:', files.length, 'archivos');
+                    console.log('📋 Primeros archivos:', files.slice(0, 3));
+                })
+                .catch(error => {
+                    console.error('❌ Test voces falló:', error);
+                });
+        }
+    }, 2000);
+});
+
+// Debug de folders IDs
+function debugFolderIds() {
+    console.log('🔍 DEBUG IDS DE CARPETAS:');
+    
+    const config = window.DRIVE_CONFIG;
+    if (!config) {
+        console.error('❌ DRIVE_CONFIG no disponible');
+        return;
+    }
+    
+    console.log('📁 Carpetas configuradas:');
+    console.log('  Instrumentos:', config.FOLDERS?.INSTRUMENTOS);
+    console.log('  Voces:', config.FOLDERS?.VOCES);
+    
+    // Verificar que son IDs válidos
+    const instrumentosId = config.FOLDERS?.INSTRUMENTOS;
+    const vocesId = config.FOLDERS?.VOCES;
+    
+    const isValidId = (id) => {
+        return id && 
+               typeof id === 'string' && 
+               id.length >= 25 && 
+               !id.includes('http') && 
+               !id.includes('drive.google.com');
+    };
+    
+    console.log('✅ ID Instrumentos válido:', isValidId(instrumentosId));
+    console.log('✅ ID Voces válido:', isValidId(vocesId));
+    
+    if (!isValidId(instrumentosId) || !isValidId(vocesId)) {
+        console.error('❌ PROBLEMA: Los IDs de carpetas no son válidos');
+        console.error('💡 Los IDs deben ser solo el código, no la URL completa');
+        console.error('✅ Correcto: "1tdyXTT-p7ZV1eUcvfrcvjch0Y1yC-wpV"');
+        console.error('❌ Incorrecto: "https://drive.google.com/drive/folders/1tdyXTT-p7ZV1eUcvfrcvjch0Y1yC-wpV"');
+    }
+}
+
+// Test de acceso a Google Drive API
+async function testDriveAPIAccess() {
+    console.log('🧪 TEST DE ACCESO A GOOGLE DRIVE API...');
+    
+    const driveAPI = window.AppState?.driveAPI;
+    if (!driveAPI) {
+        console.error('❌ DriveAPI no disponible');
+        return;
+    }
+    
+    if (!driveAPI.isSignedIn) {
+        console.error('❌ Usuario no autenticado');
+        return;
+    }
+    
+    try {
+        // Test directo de Google Drive API
+        const testResponse = await driveAPI.gapi.client.drive.files.list({
+            q: 'parents in "1tdyXTT-p7ZV1eUcvfrcvjch0Y1yC-wpV"',
+            fields: 'files(id,name,mimeType)',
+            pageSize: 5
+        });
+        
+        console.log('✅ Test API exitoso:', testResponse.result);
+        
+    } catch (error) {
+        console.error('❌ Test API falló:', error);
+    }
+}
+
+// Agregar funciones al window para debugging manual
+window.debugFolderIds = debugFolderIds;
+window.testDriveAPIAccess = testDriveAPIAccess;
+
+// Ejecutar debug de folder IDs inmediatamente
+setTimeout(debugFolderIds, 1000);
+
+console.log('🔧 Debug scripts cargados. Funciones disponibles:');
+console.log('  - debugFolderIds()');
+console.log('  - testDriveAPIAccess()');
+console.log('  - showOAuthDebugInfo()');

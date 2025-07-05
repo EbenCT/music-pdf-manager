@@ -1,6 +1,6 @@
 /**
- * MUSIC PDF MANAGER - DRIVE CONFIGURATION (SOLO DRIVE REAL)
- * Configuración SOLO para Google Drive API - Sin datos simulados
+ * MUSIC PDF MANAGER - DRIVE CONFIGURATION (CORREGIDA)
+ * Configuración SOLO para Google Drive API - Con IDs corregidos
  */
 
 // === CONFIGURACIÓN DE GOOGLE DRIVE API ===
@@ -11,7 +11,7 @@ const DRIVE_CONFIG = {
     DISCOVERY_DOC: 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest',
     SCOPES: 'https://www.googleapis.com/auth/drive.readonly',
     
-    // IDs de carpetas reales
+    // IDs de carpetas CORREGIDOS (solo el ID, no la URL completa)
     FOLDERS: {
         INSTRUMENTOS: '1tdyXTT-p7ZV1eUcvfrcvjch0Y1yC-wpV',
         VOCES: '1joKAru0Z_jrgOracNjZzQZXbb2mpxCi7'
@@ -22,7 +22,7 @@ const DRIVE_CONFIG = {
     MAX_RESULTS: 100,
     ORDER_BY: 'name',
     
-    // URLs de verificación
+    // URLs de verificación (para referencia únicamente)
     FOLDER_URLS: {
         INSTRUMENTOS: 'https://drive.google.com/drive/folders/1tdyXTT-p7ZV1eUcvfrcvjch0Y1yC-wpV',
         VOCES: 'https://drive.google.com/drive/folders/1joKAru0Z_jrgOracNjZzQZXbb2mpxCi7'
@@ -87,6 +87,25 @@ const ConfigUtils = {
     },
     
     /**
+     * Verificar que los IDs de carpetas sean válidos
+     */
+    areFolderIdsValid() {
+        const instrumentosId = DRIVE_CONFIG.FOLDERS.INSTRUMENTOS;
+        const vocesId = DRIVE_CONFIG.FOLDERS.VOCES;
+        
+        // Verificar que no sean URLs
+        const isValidId = (id) => {
+            return id && 
+                   typeof id === 'string' && 
+                   id.length >= 25 && 
+                   !id.includes('http') && 
+                   !id.includes('drive.google.com');
+        };
+        
+        return isValidId(instrumentosId) && isValidId(vocesId);
+    },
+    
+    /**
      * Obtiene la configuración completa
      */
     getConfig() {
@@ -94,7 +113,8 @@ const ConfigUtils = {
             drive: DRIVE_CONFIG,
             app: APP_CONFIG,
             isDev: false, // SIEMPRE FALSE
-            credentialsValid: this.areCredentialsValid()
+            credentialsValid: this.areCredentialsValid(),
+            folderIdsValid: this.areFolderIdsValid()
         };
     },
     
@@ -131,8 +151,19 @@ const ConfigUtils = {
         console.log('📊 API Key válida:', !!DRIVE_CONFIG.API_KEY);
         console.log('📊 Client ID válido:', !!DRIVE_CONFIG.CLIENT_ID);
         console.log('📊 Credenciales válidas:', this.areCredentialsValid());
+        console.log('📊 IDs de carpetas válidos:', this.areFolderIdsValid());
         console.log('📊 Modo desarrollo:', this.isDevelopmentMode());
-        console.log('📊 URLs de carpetas:', DRIVE_CONFIG.FOLDER_URLS);
+        console.log('📊 IDs de carpetas:', DRIVE_CONFIG.FOLDERS);
+        
+        // Debug adicional para verificar IDs
+        console.log('🔍 Debug de carpetas:');
+        console.log('  📁 Instrumentos ID:', DRIVE_CONFIG.FOLDERS.INSTRUMENTOS);
+        console.log('  📁 Voces ID:', DRIVE_CONFIG.FOLDERS.VOCES);
+        
+        if (!this.areFolderIdsValid()) {
+            console.error('❌ ERROR: Los IDs de carpetas no son válidos');
+            console.error('💡 Asegúrate de usar solo el ID, no la URL completa');
+        }
     }
 };
 
@@ -144,4 +175,4 @@ window.ConfigUtils = ConfigUtils;
 // Log inicial
 ConfigUtils.logDriveStatus();
 
-console.log('⚙️ Configuración cargada: SOLO GOOGLE DRIVE REAL');
+console.log('⚙️ Configuración cargada: SOLO GOOGLE DRIVE REAL - IDs CORREGIDOS');

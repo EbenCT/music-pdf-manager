@@ -306,9 +306,9 @@ class DriveAPIGIS {
         try {
             console.log(`📁 Obteniendo archivos de ${folderType} desde Google Drive...`);
 
-            // Verificar autenticación
+            // SOLO verificar autenticación, NO autenticar automáticamente
             if (!this.isSignedIn || !this.accessToken) {
-                await this.authenticate();
+                throw new Error(`No autenticado. Llama a authenticate() primero.`);
             }
 
             // Obtener ID de carpeta

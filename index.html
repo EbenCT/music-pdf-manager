@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="css/modules.css">
     <link rel="stylesheet" href="css/responsive.css">
     
-    <!-- META TAGS PARA GOOGLE Identity Services - ACTUALIZADO PARA GIS -->
+    <!-- META TAGS PARA GOOGLE Identity Services - CSP CORREGIDA -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self'; 
         script-src 'self' 'unsafe-inline' 'unsafe-eval' 
@@ -37,7 +37,7 @@
         base-uri 'self';
     ">
     
-    <!-- PRELOAD GOOGLE APIs PARA MEJOR RENDIMIENTO -->
+    <!-- PRELOAD GOOGLE APIs -->
     <link rel="preconnect" href="https://apis.google.com" crossorigin>
     <link rel="preconnect" href="https://accounts.google.com" crossorigin>
     <link rel="preconnect" href="https://www.googleapis.com" crossorigin>
@@ -48,6 +48,82 @@
     
     <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <!-- Estilos adicionales para autenticación -->
+    <style>
+        /* === CONNECTION STATUS PANEL === */
+        .connection-status {
+            background: linear-gradient(135deg, var(--dark-gray), var(--medium-gray));
+            border: 2px solid var(--border-gray);
+            border-radius: var(--radius-lg);
+            margin-bottom: var(--spacing-xl);
+            overflow: hidden;
+            box-shadow: var(--shadow-md);
+            transition: all var(--transition-normal);
+        }
+
+        .connection-status.hidden {
+            display: none;
+        }
+
+        .status-content {
+            padding: var(--spacing-lg);
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-lg);
+            flex-wrap: wrap;
+        }
+
+        .status-icon {
+            font-size: 2.5rem;
+            opacity: 0.8;
+            animation: pulse 2s infinite;
+        }
+
+        .status-info {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .status-info h3 {
+            color: var(--text-primary);
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: var(--spacing-xs);
+        }
+
+        .status-info p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .status-actions {
+            display: flex;
+            gap: var(--spacing-sm);
+            flex-wrap: wrap;
+        }
+
+        /* === AUTH BUTTON === */
+        .btn#auth-button {
+            background: linear-gradient(135deg, #4285f4, #34a853);
+            color: var(--white);
+            border: none;
+            font-weight: 600;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn#auth-button:hover {
+            background: linear-gradient(135deg, #3367d6, #2d9a47);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.8; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.05); }
+        }
+    </style>
 </head>
 <body>
     <div id="app">
@@ -96,7 +172,7 @@
                             <button id="auth-button" class="btn" style="display: none;">
                                 🔐 Iniciar Sesión con Google
                             </button>
-                            <button id="retry-button" class="btn secondary" style="display: none;" onclick="window.app.retryConnection()">
+                            <button id="retry-button" class="btn secondary" style="display: none;" onclick="window.app && window.app.retryConnection ? window.app.retryConnection() : location.reload()">
                                 🔄 Intentar de Nuevo
                             </button>
                         </div>
@@ -183,11 +259,41 @@
         </div>
     </div>
 
-    <!-- Scripts en ORDEN CORRECTO -->
+    <!-- Scripts en ORDEN CORRECTO - CRÍTICO -->
+    <script>
+        // Verificar que Google Identity Services se cargó
+        console.log('🔍 Verificando Google Identity Services...');
+        
+        function checkGoogleIdentityServices() {
+            if (typeof google !== 'undefined' && google.accounts) {
+                console.log('✅ Google Identity Services cargado correctamente');
+                return true;
+            } else {
+                console.warn('⚠️ Google Identity Services no está disponible');
+                return false;
+            }
+        }
+        
+        // Intentar verificar después de un delay
+        setTimeout(checkGoogleIdentityServices, 1000);
+    </script>
+    
     <script src="config/drive-config.js"></script>
-    <script src="js/drive-api.js"></script>
+    <script src="js/drive-api-gis.js"></script>
     <script src="js/pdf-viewer.js"></script>
     <script src="js/search.js"></script>
     <script src="js/main.js"></script>
+    
+    <script>
+        // Debug script para verificar carga de archivos
+        window.addEventListener('load', function() {
+            console.log('🔍 Verificando carga de scripts...');
+            console.log('📊 ConfigUtils:', typeof ConfigUtils !== 'undefined' ? '✅' : '❌');
+            console.log('📊 DriveAPIGIS:', typeof DriveAPIGIS !== 'undefined' ? '✅' : '❌');
+            console.log('📊 PDFViewer:', typeof PDFViewer !== 'undefined' ? '✅' : '❌');
+            console.log('📊 SearchManager:', typeof SearchManager !== 'undefined' ? '✅' : '❌');
+            console.log('📊 Google Identity:', typeof google !== 'undefined' && google.accounts ? '✅' : '❌');
+        });
+    </script>
 </body>
 </html>
