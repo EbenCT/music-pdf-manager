@@ -1,6 +1,6 @@
 /**
- * MUSIC PDF MANAGER - PDF VIEWER
- * Maneja la visualización de archivos PDF usando PDF.js
+ * MUSIC PDF MANAGER - PDF VIEWER CORREGIDO
+ * Maneja la visualización de archivos PDF usando PDF.js con URLs directas de Google Drive
  */
 
 class PDFViewer {
@@ -12,6 +12,8 @@ class PDFViewer {
         this.scale = 1.0;
         this.rotation = 0;
         this.isLoading = false;
+        this.currentFile = null;
+        this.currentBlobURL = null;
         
         // Configuración
         this.config = window.APP_CONFIG?.PDF_VIEWER || {
@@ -60,6 +62,19 @@ class PDFViewer {
         
         // Zoom controls (ya están en el HTML, solo agregar funcionalidad)
         this.setupZoomControls();
+        
+        // Download control
+        this.setupDownloadControl();
+    }
+
+    /**
+     * Configura el control de descarga
+     */
+    setupDownloadControl() {
+        const downloadBtn = document.getElementById('download-pdf');
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', () => this.downloadCurrentPDF());
+        }
     }
 
     /**
@@ -165,10 +180,14 @@ class PDFViewer {
     /**
      * Carga un PDF desde una URL o archivo
      * @param {string|File} source - URL del PDF o objeto File
+     * @param {Object} fileInfo - Información del archivo (opcional)
      */
-    async loadPDF(source) {
+    async loadPDF(source, fileInfo = null) {
         try {
             this.showLoading();
+            
+            // Guardar información del archivo
+            this.currentFile = fileInfo;
             
             // En modo desarrollo, mostrar placeholder
             if (typeof source === 'string' && source.includes('#demo-pdf-')) {
@@ -183,8 +202,15 @@ class PDFViewer {
                 throw new Error('PDF.js no está cargado');
             }
 
+            let pdfSource = source;
+
+            // Si es una URL de Google Drive, manejar con autorización
+            if (typeof source === 'string' && source.includes('googleapis.com')) {
+                pdfSource = await this.handleGoogleDriveURL(source);
+            }
+
             // Cargar el documento PDF
-            const loadingTask = pdfjsLib.getDocument(source);
+            const loadingTask = pdfjsLib.getDocument(pdfSource);
             this.currentPDF = await loadingTask.promise;
             
             this.totalPages = this.currentPDF.numPages;
@@ -205,7 +231,48 @@ class PDFViewer {
 
         } catch (error) {
             console.error('❌ Error cargando PDF:', error);
-            this.showError('No se pudo cargar el archivo PDF');
+            this.showError(`No se pudo cargar el archivo PDF: ${error.message}`);
+        }
+    }
+
+    /**
+     * Maneja URLs de Google Drive con autenticación
+     */
+    async handleGoogleDriveURL(url) {
+        try {
+            console.log('🔐 Cargando PDF desde Google Drive con autenticación...');
+            
+            // Verificar que DriveAPI esté disponible
+            const driveAPI = window.AppState?.driveAPI;
+            if (!driveAPI || !driveAPI.isSignedIn) {
+                throw new Error('No hay sesión activa de Google Drive');
+            }
+
+            // Extraer file ID de la URL
+            const fileIdMatch = url.match(/files\/([a-zA-Z0-9-_]+)/);
+            if (!fileIdMatch) {
+                throw new Error('No se pudo extraer ID del archivo de la URL');
+            }
+
+            const fileId = fileIdMatch[1];
+            console.log('📋 File ID extraído:', fileId);
+
+            // Descargar el archivo como blob
+            const blob = await driveAPI.downloadFileBlob(fileId);
+            
+            // Crear URL del blob
+            if (this.currentBlobURL) {
+                URL.revokeObjectURL(this.currentBlobURL);
+            }
+            
+            this.currentBlobURL = URL.createObjectURL(blob);
+            console.log('✅ Blob URL creada para PDF');
+            
+            return this.currentBlobURL;
+
+        } catch (error) {
+            console.error('❌ Error manejando URL de Google Drive:', error);
+            throw new Error(`Error cargando desde Google Drive: ${error.message}`);
         }
     }
 
@@ -256,6 +323,69 @@ class PDFViewer {
     }
 
     /**
+     * Descarga el PDF actual
+     */
+    async downloadCurrentPDF() {
+        try {
+            if (!this.currentFile) {
+                console.warn('⚠️ No hay archivo actual para descargar');
+                return;
+            }
+
+            console.log('📥 Iniciando descarga del PDF...');
+
+            const driveAPI = window.AppState?.driveAPI;
+            if (!driveAPI || !driveAPI.isSignedIn) {
+                throw new Error('No hay sesión activa de Google Drive');
+            }
+
+            // Mostrar indicador de descarga
+            const downloadBtn = document.getElementById('download-pdf');
+            const originalText = downloadBtn.innerHTML;
+            downloadBtn.innerHTML = '⏳';
+            downloadBtn.disabled = true;
+
+            try {
+                // Descargar archivo
+                const blob = await driveAPI.downloadFileBlob(this.currentFile.id);
+                
+                // Crear enlace de descarga
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = this.currentFile.name;
+                
+                // Simular click para descargar
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                // Limpiar URL del blob
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                
+                console.log('✅ Descarga iniciada');
+
+            } finally {
+                // Restaurar botón
+                downloadBtn.innerHTML = originalText;
+                downloadBtn.disabled = false;
+            }
+
+        } catch (error) {
+            console.error('❌ Error descargando PDF:', error);
+            
+            // Mostrar error temporal en el botón
+            const downloadBtn = document.getElementById('download-pdf');
+            const originalText = downloadBtn.innerHTML;
+            downloadBtn.innerHTML = '❌';
+            setTimeout(() => {
+                downloadBtn.innerHTML = originalText;
+                downloadBtn.disabled = false;
+            }, 2000);
+        }
+    }
+
+    /**
      * Muestra placeholder para PDFs demo
      */
     showDemoPlaceholder(source) {
@@ -295,7 +425,7 @@ class PDFViewer {
         this.container.innerHTML = `
             <div class="pdf-loading">
                 <div class="spinner"></div>
-                <p>Cargando PDF...</p>
+                <p>Cargando PDF desde Google Drive...</p>
             </div>
         `;
     }
@@ -309,9 +439,14 @@ class PDFViewer {
                 <div class="pdf-error-icon">⚠️</div>
                 <h3>Error</h3>
                 <p>${message}</p>
-                <button class="btn secondary" onclick="location.reload()">
-                    🔄 Reintentar
-                </button>
+                <div style="margin-top: var(--spacing-lg);">
+                    <button class="btn secondary" onclick="window.app && window.app.retryLoadFiles ? window.app.retryLoadFiles() : location.reload()">
+                        🔄 Reintentar
+                    </button>
+                    <button class="btn secondary" onclick="window.debugDriveConnection && window.debugDriveConnection()" style="margin-left: var(--spacing-sm);">
+                        🔧 Debug
+                    </button>
+                </div>
             </div>
         `;
     }
@@ -358,7 +493,10 @@ class PDFViewer {
             const prevBtn = this.navControls.querySelector('#prev-page');
             const nextBtn = this.navControls.querySelector('#next-page');
 
-            if (pageInput) pageInput.value = this.currentPage;
+            if (pageInput) {
+                pageInput.value = this.currentPage;
+                pageInput.max = this.totalPages;
+            }
             if (pageInfo) pageInfo.textContent = `de ${this.totalPages}`;
             
             if (prevBtn) prevBtn.disabled = this.currentPage <= 1;
@@ -368,6 +506,12 @@ class PDFViewer {
         // Mostrar canvas si no está visible
         if (!this.container.contains(this.canvas) && this.currentPDF) {
             this.showCanvas();
+        }
+
+        // Actualizar estado del botón de descarga
+        const downloadBtn = document.getElementById('download-pdf');
+        if (downloadBtn) {
+            downloadBtn.style.display = this.currentFile ? 'inline-flex' : 'none';
         }
     }
 
@@ -489,7 +633,8 @@ class PDFViewer {
             currentPage: this.currentPage,
             scale: this.scale,
             rotation: this.rotation,
-            isLoading: this.isLoading
+            isLoading: this.isLoading,
+            file: this.currentFile
         };
     }
 
@@ -497,12 +642,19 @@ class PDFViewer {
      * Limpia el visualizador
      */
     clear() {
+        // Limpiar blob URL si existe
+        if (this.currentBlobURL) {
+            URL.revokeObjectURL(this.currentBlobURL);
+            this.currentBlobURL = null;
+        }
+
         this.currentPDF = null;
         this.currentPage = 1;
         this.totalPages = 0;
         this.scale = this.config.DEFAULT_SCALE;
         this.rotation = 0;
         this.isLoading = false;
+        this.currentFile = null;
 
         // Mostrar placeholder
         this.container.innerHTML = `
@@ -519,9 +671,11 @@ class PDFViewer {
      * Destruye el visualizador y limpia eventos
      */
     destroy() {
-        // Remover event listeners
-        // (En una implementación más robusta, guardaríamos referencias)
-        
+        // Limpiar blob URL
+        if (this.currentBlobURL) {
+            URL.revokeObjectURL(this.currentBlobURL);
+        }
+
         // Limpiar PDF
         if (this.currentPDF) {
             this.currentPDF.destroy();
@@ -557,14 +711,54 @@ const PDFUtils = {
     },
 
     /**
-     * Descarga el PDF actual
+     * Crea función de descarga para un blob
      */
-    downloadPDF(pdfViewer, filename = 'document.pdf') {
-        if (!pdfViewer.currentPDF) return;
+    downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+};
 
-        // Esta función necesitaría implementación adicional
-        // para extraer los datos del PDF y crear un blob
-        console.log('📥 Descarga de PDF no implementada aún');
+// === FUNCIÓN DE DEBUG PARA CONEXIÓN ===
+window.debugDriveConnection = function() {
+    console.log('🔧 DEBUG DE CONEXIÓN A GOOGLE DRIVE:');
+    
+    const driveAPI = window.AppState?.driveAPI;
+    if (!driveAPI) {
+        console.error('❌ DriveAPI no disponible');
+        return;
+    }
+    
+    console.log('📊 Estado de DriveAPI:', driveAPI.getConnectionStatus());
+    
+    if (driveAPI.isSignedIn) {
+        console.log('✅ Usuario autenticado');
+        console.log('🔑 Token válido:', driveAPI.isTokenValid());
+        
+        // Test de descarga de un archivo
+        const files = window.AppState?.files;
+        if (files && files.instrumentos && files.instrumentos.length > 0) {
+            const testFile = files.instrumentos[0];
+            console.log('🧪 Probando descarga de archivo:', testFile.name);
+            
+            driveAPI.downloadFileBlob(testFile.id)
+                .then(blob => {
+                    console.log('✅ Test de descarga exitoso:', blob.size, 'bytes');
+                })
+                .catch(error => {
+                    console.error('❌ Test de descarga falló:', error);
+                });
+        }
+    } else {
+        console.error('❌ Usuario no autenticado');
     }
 };
 

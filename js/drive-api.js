@@ -1,6 +1,6 @@
 /**
  * MUSIC PDF MANAGER - GOOGLE DRIVE API con Google Identity Services (GIS)
- * Implementación ACTUALIZADA usando la nueva API de Google
+ * Implementación CORREGIDA con persistencia de tokens y URLs de descarga
  */
 
 class DriveAPIGIS {
@@ -13,6 +13,14 @@ class DriveAPIGIS {
         this.gapi = null;
         this.initRetries = 0;
         this.maxRetries = 3;
+        this.tokenExpiryTime = null;
+        
+        // Configuración de localStorage
+        this.STORAGE_KEYS = {
+            ACCESS_TOKEN: 'gdrive_access_token',
+            EXPIRY_TIME: 'gdrive_token_expiry',
+            USER_INFO: 'gdrive_user_info'
+        };
     }
 
     /**
@@ -38,6 +46,9 @@ class DriveAPIGIS {
             // Inicializar Google Identity Services
             await this.initGoogleIdentity();
 
+            // Verificar si hay token guardado y válido
+            await this.checkStoredToken();
+
             this.isInitialized = true;
             console.log('✅ Google Drive API inicializada correctamente con GIS');
 
@@ -55,6 +66,111 @@ class DriveAPIGIS {
             }
             
             throw new Error(`No se pudo inicializar Google Drive API después de ${this.maxRetries} intentos: ${error.message}`);
+        }
+    }
+
+    /**
+     * Verifica si hay un token almacenado y válido
+     */
+    async checkStoredToken() {
+        try {
+            const storedToken = localStorage.getItem(this.STORAGE_KEYS.ACCESS_TOKEN);
+            const storedExpiry = localStorage.getItem(this.STORAGE_KEYS.EXPIRY_TIME);
+            
+            if (!storedToken || !storedExpiry) {
+                console.log('📝 No hay token almacenado');
+                return false;
+            }
+
+            const expiryTime = parseInt(storedExpiry);
+            const currentTime = Date.now();
+            
+            // Verificar si el token ha expirado (con 5 minutos de margen)
+            if (currentTime >= (expiryTime - 300000)) {
+                console.log('⏰ Token almacenado ha expirado');
+                this.clearStoredToken();
+                return false;
+            }
+
+            // Token válido - configurar
+            this.accessToken = storedToken;
+            this.tokenExpiryTime = expiryTime;
+            this.isSignedIn = true;
+
+            // Configurar token en GAPI
+            this.gapi.client.setToken({
+                access_token: this.accessToken
+            });
+
+            console.log('✅ Token almacenado válido restaurado');
+            this.updateAuthStatus(true);
+            
+            return true;
+
+        } catch (error) {
+            console.error('❌ Error verificando token almacenado:', error);
+            this.clearStoredToken();
+            return false;
+        }
+    }
+
+    /**
+     * Guarda el token en localStorage
+     */
+    storeToken(accessToken, expiresIn) {
+        try {
+            const expiryTime = Date.now() + (expiresIn * 1000);
+            
+            localStorage.setItem(this.STORAGE_KEYS.ACCESS_TOKEN, accessToken);
+            localStorage.setItem(this.STORAGE_KEYS.EXPIRY_TIME, expiryTime.toString());
+            
+            this.tokenExpiryTime = expiryTime;
+            
+            console.log('💾 Token guardado en localStorage');
+            
+        } catch (error) {
+            console.error('❌ Error guardando token:', error);
+        }
+    }
+
+    /**
+     * Limpia el token almacenado
+     */
+    clearStoredToken() {
+        try {
+            localStorage.removeItem(this.STORAGE_KEYS.ACCESS_TOKEN);
+            localStorage.removeItem(this.STORAGE_KEYS.EXPIRY_TIME);
+            localStorage.removeItem(this.STORAGE_KEYS.USER_INFO);
+            
+            this.accessToken = null;
+            this.tokenExpiryTime = null;
+            this.isSignedIn = false;
+            
+            console.log('🗑️ Token almacenado limpiado');
+            
+        } catch (error) {
+            console.error('❌ Error limpiando token:', error);
+        }
+    }
+
+    /**
+     * Actualiza el estado de autenticación en la UI
+     */
+    updateAuthStatus(isAuthenticated, userInfo = null) {
+        const authStatus = document.getElementById('auth-status');
+        const authIcon = document.getElementById('auth-icon');
+        const authText = document.getElementById('auth-text');
+        
+        if (authStatus && authIcon && authText) {
+            if (isAuthenticated) {
+                authStatus.className = 'auth-status authenticated';
+                authIcon.textContent = '✅';
+                authText.textContent = userInfo ? `${userInfo.name}` : 'Conectado';
+            } else {
+                authStatus.className = 'auth-status not-authenticated';
+                authIcon.textContent = '❌';
+                authText.textContent = 'No conectado';
+            }
         }
     }
 
@@ -174,6 +290,10 @@ class DriveAPIGIS {
                         this.accessToken = response.access_token;
                         this.isSignedIn = true;
                         
+                        // Guardar token (expires_in viene en segundos)
+                        const expiresIn = response.expires_in || 3600; // Default 1 hora
+                        this.storeToken(response.access_token, expiresIn);
+                        
                         // Configurar token en GAPI
                         this.gapi.client.setToken({
                             access_token: this.accessToken
@@ -205,22 +325,20 @@ class DriveAPIGIS {
                 await this.init();
             }
 
+            // Si ya está autenticado y el token es válido, usar ese
+            if (this.isSignedIn && this.accessToken && this.isTokenValid()) {
+                console.log('✅ Usuario ya está autenticado con token válido');
+                this.onAuthSuccess();
+                return true;
+            }
+
             // Verificar que tokenClient esté disponible
             if (!this.tokenClient) {
                 throw new Error('Google Identity Services no está inicializado correctamente');
             }
 
-            // Si ya está autenticado y el token es válido, usar ese
-            if (this.isSignedIn && this.accessToken) {
-                console.log('✅ Usuario ya está autenticado');
-                return true;
-            }
-
             // Solicitar autenticación
             console.log('🔑 Solicitando autorización del usuario...');
-            
-            // Mostrar botón de autorización si está disponible
-            this.showAuthButton();
             
             return new Promise((resolve, reject) => {
                 // Configurar callbacks temporales
@@ -246,26 +364,72 @@ class DriveAPIGIS {
 
         } catch (error) {
             console.error('❌ Error en autenticación:', error);
+            this.updateAuthStatus(false);
             throw new Error(`Autenticación fallida: ${error.message}`);
         }
     }
 
     /**
+     * Verifica si el token actual es válido
+     */
+    isTokenValid() {
+        if (!this.tokenExpiryTime) return false;
+        
+        const currentTime = Date.now();
+        const timeLeft = this.tokenExpiryTime - currentTime;
+        
+        // Considerar válido si quedan más de 5 minutos
+        return timeLeft > 300000;
+    }
+
+    /**
      * Maneja el éxito de autenticación
      */
-    onAuthSuccess() {
+    async onAuthSuccess() {
         console.log('🎉 Autenticación completada exitosamente');
         
-        // Ocultar botón de auth
-        this.hideAuthButton();
-        
-        // Notificar al app principal
-        if (window.app && typeof window.app.onAuthSuccess === 'function') {
-            window.app.onAuthSuccess();
+        try {
+            // Obtener información del usuario
+            const userInfo = await this.getUserInfo();
+            this.updateAuthStatus(true, userInfo);
+            
+            // Ocultar botón de auth
+            this.hideAuthButton();
+            
+            // Notificar al app principal
+            if (window.app && typeof window.app.onAuthSuccess === 'function') {
+                window.app.onAuthSuccess();
+            }
+            
+            // Trigger evento personalizado
+            window.dispatchEvent(new CustomEvent('driveAuthSuccess'));
+            
+        } catch (error) {
+            console.error('❌ Error obteniendo info del usuario:', error);
+            this.updateAuthStatus(true); // Aún mostrar como autenticado
         }
-        
-        // Trigger evento personalizado
-        window.dispatchEvent(new CustomEvent('driveAuthSuccess'));
+    }
+
+    /**
+     * Obtiene información del usuario autenticado
+     */
+    async getUserInfo() {
+        try {
+            const response = await this.gapi.client.request({
+                path: 'https://www.googleapis.com/oauth2/v2/userinfo'
+            });
+            
+            const userInfo = response.result;
+            
+            // Guardar info del usuario
+            localStorage.setItem(this.STORAGE_KEYS.USER_INFO, JSON.stringify(userInfo));
+            
+            return userInfo;
+            
+        } catch (error) {
+            console.error('❌ Error obteniendo info del usuario:', error);
+            return null;
+        }
     }
 
     /**
@@ -290,7 +454,7 @@ class DriveAPIGIS {
                 errorMessage = `Error de autenticación: ${error}`;
         }
         
-        // Mostrar error en UI
+        this.updateAuthStatus(false);
         this.showAuthError(errorMessage);
         
         // Notificar al app principal
@@ -306,9 +470,9 @@ class DriveAPIGIS {
         try {
             console.log(`📁 Obteniendo archivos de ${folderType} desde Google Drive...`);
 
-            // SOLO verificar autenticación, NO autenticar automáticamente
-            if (!this.isSignedIn || !this.accessToken) {
-                throw new Error(`No autenticado. Llama a authenticate() primero.`);
+            // Verificar autenticación
+            if (!this.isSignedIn || !this.accessToken || !this.isTokenValid()) {
+                throw new Error(`No autenticado o token expirado. Llama a authenticate() primero.`);
             }
 
             // Obtener ID de carpeta
@@ -337,7 +501,7 @@ class DriveAPIGIS {
             // Realizar petición
             const response = await this.gapi.client.drive.files.list({
                 q: query,
-                fields: 'files(id,name,size,modifiedTime,webViewLink,thumbnailLink,parents)',
+                fields: 'files(id,name,size,modifiedTime,webViewLink,thumbnailLink,parents,downloadUrl)',
                 orderBy: this.config.ORDER_BY,
                 pageSize: this.config.MAX_RESULTS
             });
@@ -358,6 +522,14 @@ class DriveAPIGIS {
 
         } catch (error) {
             console.error(`❌ Error obteniendo archivos de ${folderType}:`, error);
+            
+            // Si es un error de token, intentar limpiar
+            if (error.message.includes('401') || error.message.includes('token')) {
+                console.log('🔄 Token posiblemente inválido, limpiando...');
+                this.clearStoredToken();
+                this.updateAuthStatus(false);
+            }
+            
             throw new Error(`No se pudieron cargar los archivos de ${folderType}: ${error.message}`);
         }
     }
@@ -382,11 +554,50 @@ class DriveAPIGIS {
             name: file.name,
             size: this.formatFileSize(file.size),
             modifiedTime: file.modifiedTime,
-            downloadUrl: this.getViewerURL(file.id),
+            downloadUrl: this.getDirectDownloadURL(file.id), // URL corregida
             webViewLink: file.webViewLink,
             thumbnailLink: file.thumbnailLink || null,
             mimeType: 'application/pdf'
         };
+    }
+
+    /**
+     * Obtiene la URL directa de descarga para PDF.js
+     */
+    getDirectDownloadURL(fileId) {
+        // Usar la URL de export que permite CORS
+        return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${this.config.API_KEY}`;
+    }
+
+    /**
+     * Obtiene la URL de descarga con token de autorización
+     */
+    getAuthenticatedDownloadURL(fileId) {
+        // Esta URL requiere el header Authorization
+        return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
+    }
+
+    /**
+     * Descarga un archivo con autenticación
+     */
+    async downloadFileBlob(fileId) {
+        try {
+            const response = await fetch(this.getAuthenticatedDownloadURL(fileId), {
+                headers: {
+                    'Authorization': `Bearer ${this.accessToken}`
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            return await response.blob();
+
+        } catch (error) {
+            console.error('❌ Error descargando archivo:', error);
+            throw error;
+        }
     }
 
     /**
@@ -403,13 +614,6 @@ class DriveAPIGIS {
     }
 
     /**
-     * Obtiene la URL directa de visualización
-     */
-    getViewerURL(fileId) {
-        return `https://drive.google.com/file/d/${fileId}/preview`;
-    }
-
-    /**
      * Muestra botón de autenticación
      */
     showAuthButton() {
@@ -417,7 +621,9 @@ class DriveAPIGIS {
         if (button) {
             button.style.display = 'inline-flex';
             button.onclick = () => {
-                this.tokenClient.requestAccessToken({ prompt: 'consent' });
+                this.authenticate().catch(error => {
+                    console.error('❌ Error en autenticación manual:', error);
+                });
             };
         }
         
@@ -437,6 +643,12 @@ class DriveAPIGIS {
         const button = document.getElementById('auth-button');
         if (button) {
             button.style.display = 'none';
+        }
+        
+        // Mostrar botón de logout
+        const logoutButton = document.getElementById('logout-button');
+        if (logoutButton) {
+            logoutButton.style.display = 'inline-flex';
         }
         
         // Ocultar panel de estado
@@ -472,6 +684,7 @@ class DriveAPIGIS {
             isInitialized: this.isInitialized,
             isSignedIn: this.isSignedIn,
             hasAccessToken: !!this.accessToken,
+            tokenValid: this.isTokenValid(),
             hasTokenClient: !!this.tokenClient,
             hasGapi: !!this.gapi,
             config: {
@@ -490,13 +703,23 @@ class DriveAPIGIS {
             if (this.accessToken) {
                 // Revocar token
                 google.accounts.oauth2.revoke(this.accessToken);
-                this.accessToken = null;
-                this.isSignedIn = false;
+                
+                // Limpiar estado
+                this.clearStoredToken();
                 
                 // Limpiar token de GAPI
                 this.gapi.client.setToken(null);
                 
+                // Actualizar UI
+                this.updateAuthStatus(false);
+                this.showAuthButton();
+                
                 console.log('👋 Usuario desconectado');
+                
+                // Notificar al app principal
+                if (window.app && typeof window.app.onSignOut === 'function') {
+                    window.app.onSignOut();
+                }
             }
         } catch (error) {
             console.error('❌ Error cerrando sesión:', error);
@@ -560,6 +783,20 @@ const DriveUtils = {
 
     getDownloadUrl(fileId) {
         return `https://drive.google.com/uc?export=download&id=${fileId}`;
+    },
+
+    /**
+     * Convierte blob a URL para PDF.js
+     */
+    createBlobURL(blob) {
+        return URL.createObjectURL(blob);
+    },
+
+    /**
+     * Libera memoria de blob URL
+     */
+    revokeBlobURL(url) {
+        URL.revokeObjectURL(url);
     }
 };
 
@@ -567,4 +804,4 @@ const DriveUtils = {
 window.DriveAPIGIS = DriveAPIGIS;
 window.DriveUtils = DriveUtils;
 
-console.log('🚀 Drive API GIS cargada: NUEVA IMPLEMENTACIÓN CON GOOGLE IDENTITY SERVICES');
+console.log('🚀 Drive API GIS cargada: VERSIÓN CORREGIDA con persistencia y URLs directas');
