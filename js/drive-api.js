@@ -1,97 +1,45 @@
 /**
- * MUSIC PDF MANAGER - GOOGLE DRIVE API INTEGRATION (MEJORADA)
- * Maneja la integración EXCLUSIVA con Google Drive API
+ * MUSIC PDF MANAGER - GOOGLE DRIVE API con Google Identity Services (GIS)
+ * Implementación ACTUALIZADA usando la nueva API de Google
  */
 
-class DriveAPI {
+class DriveAPIGIS {
     constructor() {
         this.isInitialized = false;
         this.isSignedIn = false;
-        this.gapi = null;
+        this.accessToken = null;
         this.config = window.DRIVE_CONFIG;
-        this.authInstance = null;
+        this.tokenClient = null;
+        this.gapi = null;
         this.initRetries = 0;
         this.maxRetries = 3;
     }
 
     /**
-     * Inicializa Google API - OBLIGATORIO
+     * Inicializa Google API con Google Identity Services (GIS)
      */
     async init() {
         try {
             if (this.isInitialized) return true;
 
-            console.log('☁️ Inicializando Google Drive API...');
+            console.log('☁️ Inicializando Google Drive API con GIS...');
 
             // Verificar credenciales
             if (!this.config.API_KEY || !this.config.CLIENT_ID) {
                 throw new Error('Credenciales de Google Drive no configuradas');
             }
 
-            // Cargar Google API
+            // Cargar GAPI primero
             await this.loadGoogleAPI();
 
-            // Verificar que gapi se cargó
-            if (!this.gapi || typeof this.gapi.load !== 'function') {
-                throw new Error('Google API no se cargó correctamente');
-            }
+            // Inicializar GAPI client
+            await this.initGapiClient();
 
-            // Inicializar con Promise para manejo de errores mejorado
-            await new Promise((resolve, reject) => {
-                console.log('🔧 Cargando módulos client:auth2...');
-                
-                this.gapi.load('client:auth2', async () => {
-                    try {
-                        console.log('🔧 Configurando cliente Google API...');
-                        console.log('🔑 API Key:', this.config.API_KEY.substring(0, 10) + '...');
-                        console.log('🔑 Client ID:', this.config.CLIENT_ID.substring(0, 20) + '...');
-                        
-                        const initConfig = {
-                            apiKey: this.config.API_KEY,
-                            clientId: this.config.CLIENT_ID,
-                            discoveryDocs: [this.config.DISCOVERY_DOC],
-                            scope: this.config.SCOPES
-                        };
+            // Inicializar Google Identity Services
+            await this.initGoogleIdentity();
 
-                        console.log('🔧 Llamando a gapi.client.init...');
-                        await this.gapi.client.init(initConfig);
-                        console.log('✅ gapi.client.init completado');
-
-                        // Obtener instancia de autenticación
-                        console.log('🔧 Obteniendo instancia de auth2...');
-                        this.authInstance = this.gapi.auth2.getAuthInstance();
-                        
-                        if (!this.authInstance) {
-                            throw new Error('No se pudo obtener instancia de autenticación de gapi.auth2');
-                        }
-
-                        console.log('✅ Instancia de auth2 obtenida');
-
-                        // Verificar estado de autenticación
-                        this.isSignedIn = this.authInstance.isSignedIn.get();
-                        this.isInitialized = true;
-
-                        console.log('✅ Google Drive API inicializada correctamente');
-                        console.log('🔐 Usuario ya autenticado:', this.isSignedIn);
-
-                        resolve();
-                    } catch (error) {
-                        console.error('❌ Error detallado en init de gapi.client:', error);
-                        console.error('❌ Tipo de error:', typeof error);
-                        console.error('❌ Error stringificado:', JSON.stringify(error, null, 2));
-                        
-                        // Intentar obtener más detalles del error
-                        if (error && error.details) {
-                            console.error('❌ Detalles del error:', error.details);
-                        }
-                        if (error && error.result) {
-                            console.error('❌ Resultado del error:', error.result);
-                        }
-                        
-                        reject(new Error(`Error en gapi.client.init: ${error.message || 'Error desconocido'}`));
-                    }
-                });
-            });
+            this.isInitialized = true;
+            console.log('✅ Google Drive API inicializada correctamente con GIS');
 
             return true;
 
@@ -102,7 +50,7 @@ class DriveAPI {
             if (this.initRetries < this.maxRetries) {
                 this.initRetries++;
                 console.log(`🔄 Reintentando inicialización (${this.initRetries}/${this.maxRetries})...`);
-                await new Promise(resolve => setTimeout(resolve, 2000)); // Esperar 2 segundos
+                await new Promise(resolve => setTimeout(resolve, 2000));
                 return this.init();
             }
             
@@ -111,9 +59,9 @@ class DriveAPI {
     }
 
     /**
-     * Carga la librería de Google API
+     * Carga la librería GAPI (para API calls)
      */
-    loadGoogleAPI() {
+    async loadGoogleAPI() {
         return new Promise((resolve, reject) => {
             // Verificar si ya está cargado
             if (typeof gapi !== 'undefined' && gapi.load) {
@@ -143,7 +91,6 @@ class DriveAPI {
                 if (resolved) return;
                 resolved = true;
                 
-                // Esperar un poco para que gapi esté disponible
                 setTimeout(() => {
                     if (typeof gapi !== 'undefined' && gapi.load) {
                         this.gapi = gapi;
@@ -159,7 +106,7 @@ class DriveAPI {
                 if (resolved) return;
                 resolved = true;
                 console.error('❌ Error cargando Google API script:', error);
-                reject(new Error('No se pudo cargar Google API script - posible bloqueo de CSP'));
+                reject(new Error('No se pudo cargar Google API script'));
             };
             
             // Timeout de seguridad
@@ -175,77 +122,127 @@ class DriveAPI {
     }
 
     /**
-     * Autentica al usuario - OBLIGATORIO para acceder a Drive
+     * Inicializa GAPI client (sin auth)
+     */
+    async initGapiClient() {
+        return new Promise((resolve, reject) => {
+            console.log('🔧 Inicializando GAPI client...');
+            
+            this.gapi.load('client', async () => {
+                try {
+                    await this.gapi.client.init({
+                        apiKey: this.config.API_KEY,
+                        discoveryDocs: [this.config.DISCOVERY_DOC]
+                    });
+                    
+                    console.log('✅ GAPI client inicializado correctamente');
+                    resolve();
+                } catch (error) {
+                    console.error('❌ Error inicializando GAPI client:', error);
+                    reject(error);
+                }
+            });
+        });
+    }
+
+    /**
+     * Inicializa Google Identity Services (GIS)
+     */
+    async initGoogleIdentity() {
+        return new Promise((resolve, reject) => {
+            console.log('🔧 Inicializando Google Identity Services...');
+            
+            // Verificar que google.accounts esté disponible
+            if (typeof google === 'undefined' || !google.accounts) {
+                reject(new Error('Google Identity Services no está cargado'));
+                return;
+            }
+
+            try {
+                // Crear token client para OAuth2
+                this.tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: this.config.CLIENT_ID,
+                    scope: this.config.SCOPES,
+                    callback: (response) => {
+                        if (response.error !== undefined) {
+                            console.error('❌ Error en callback de OAuth:', response);
+                            this.handleAuthError(response.error);
+                            return;
+                        }
+                        
+                        console.log('✅ Token de acceso obtenido exitosamente');
+                        this.accessToken = response.access_token;
+                        this.isSignedIn = true;
+                        
+                        // Configurar token en GAPI
+                        this.gapi.client.setToken({
+                            access_token: this.accessToken
+                        });
+                        
+                        this.onAuthSuccess();
+                    }
+                });
+
+                console.log('✅ Google Identity Services inicializado correctamente');
+                resolve();
+                
+            } catch (error) {
+                console.error('❌ Error inicializando Google Identity Services:', error);
+                reject(error);
+            }
+        });
+    }
+
+    /**
+     * Autentica al usuario usando GIS
      */
     async authenticate() {
         try {
-            console.log('🔐 Iniciando proceso de autenticación...');
+            console.log('🔐 Iniciando proceso de autenticación con GIS...');
 
-            // Asegurar que Google API esté inicializada
+            // Asegurar que esté inicializado
             if (!this.isInitialized) {
-                console.log('🔧 Google API no inicializada, inicializando primero...');
                 await this.init();
             }
 
-            // Verificar authInstance
-            if (!this.authInstance) {
-                throw new Error('Instancia de autenticación no disponible - verificar configuración de OAuth');
+            // Verificar que tokenClient esté disponible
+            if (!this.tokenClient) {
+                throw new Error('Google Identity Services no está inicializado correctamente');
             }
 
-            // Si no está autenticado, solicitar autenticación
-            if (!this.isSignedIn) {
-                console.log('🔑 Solicitando autorización del usuario...');
-                console.log('🌐 Se abrirá popup de Google para autenticación...');
-                
-                try {
-                    const authResult = await this.authInstance.signIn({
-                        prompt: 'select_account'
-                    });
-                    
-                    console.log('🔍 Verificando resultado de autenticación...');
-                    
-                    if (authResult && authResult.isSignedIn()) {
-                        this.isSignedIn = true;
-                        console.log('✅ Usuario autenticado exitosamente');
-                        
-                        // Log de usuario autenticado
-                        const profile = authResult.getBasicProfile();
-                        console.log('👤 Usuario:', profile.getName(), '(' + profile.getEmail() + ')');
-                        
-                        // Verificar permisos
-                        const authResponse = authResult.getAuthResponse();
-                        console.log('🔑 Scopes otorgados:', authResponse.scope);
-                        
-                    } else {
-                        throw new Error('El usuario no completó la autenticación correctamente');
-                    }
-                } catch (signInError) {
-                    console.error('❌ Error en signIn:', signInError);
-                    
-                    if (signInError.error === 'popup_blocked_by_browser') {
-                        throw new Error('Popup bloqueado por el navegador. Habilita popups para este sitio.');
-                    } else if (signInError.error === 'access_denied') {
-                        throw new Error('El usuario rechazó la autorización');
-                    } else {
-                        throw new Error(`Error de autenticación: ${signInError.error || signInError.message || 'Error desconocido'}`);
-                    }
-                }
-            } else {
-                console.log('✅ Usuario ya estaba autenticado');
-                
-                // Verificar que el token siga siendo válido
-                const currentUser = this.authInstance.currentUser.get();
-                if (currentUser && currentUser.isSignedIn()) {
-                    const profile = currentUser.getBasicProfile();
-                    console.log('👤 Usuario actual:', profile.getName());
-                } else {
-                    console.warn('⚠️ Token expirado, forzando nueva autenticación...');
-                    this.isSignedIn = false;
-                    return this.authenticate(); // Recursión para reautenticar
-                }
+            // Si ya está autenticado y el token es válido, usar ese
+            if (this.isSignedIn && this.accessToken) {
+                console.log('✅ Usuario ya está autenticado');
+                return true;
             }
 
-            return true;
+            // Solicitar autenticación
+            console.log('🔑 Solicitando autorización del usuario...');
+            
+            // Mostrar botón de autorización si está disponible
+            this.showAuthButton();
+            
+            return new Promise((resolve, reject) => {
+                // Configurar callbacks temporales
+                const originalCallback = this.tokenClient.callback;
+                
+                this.tokenClient.callback = (response) => {
+                    // Restaurar callback original
+                    this.tokenClient.callback = originalCallback;
+                    
+                    if (response.error !== undefined) {
+                        console.error('❌ Error de autenticación:', response);
+                        reject(new Error(`Error de autenticación: ${response.error}`));
+                        return;
+                    }
+                    
+                    console.log('✅ Autenticación exitosa');
+                    resolve(true);
+                };
+                
+                // Solicitar token
+                this.tokenClient.requestAccessToken({ prompt: 'consent' });
+            });
 
         } catch (error) {
             console.error('❌ Error en autenticación:', error);
@@ -254,14 +251,65 @@ class DriveAPI {
     }
 
     /**
-     * Obtiene archivos PDF de una carpeta específica - SOLO DRIVE REAL
+     * Maneja el éxito de autenticación
+     */
+    onAuthSuccess() {
+        console.log('🎉 Autenticación completada exitosamente');
+        
+        // Ocultar botón de auth
+        this.hideAuthButton();
+        
+        // Notificar al app principal
+        if (window.app && typeof window.app.onAuthSuccess === 'function') {
+            window.app.onAuthSuccess();
+        }
+        
+        // Trigger evento personalizado
+        window.dispatchEvent(new CustomEvent('driveAuthSuccess'));
+    }
+
+    /**
+     * Maneja errores de autenticación
+     */
+    handleAuthError(error) {
+        console.error('❌ Error de autenticación:', error);
+        
+        let errorMessage = 'Error de autenticación desconocido';
+        
+        switch (error) {
+            case 'popup_blocked_by_browser':
+                errorMessage = 'Popup bloqueado por el navegador. Habilita popups para este sitio.';
+                break;
+            case 'access_denied':
+                errorMessage = 'El usuario rechazó la autorización';
+                break;
+            case 'invalid_client':
+                errorMessage = 'Credenciales de cliente inválidas';
+                break;
+            default:
+                errorMessage = `Error de autenticación: ${error}`;
+        }
+        
+        // Mostrar error en UI
+        this.showAuthError(errorMessage);
+        
+        // Notificar al app principal
+        if (window.app && typeof window.app.onAuthError === 'function') {
+            window.app.onAuthError(errorMessage);
+        }
+    }
+
+    /**
+     * Obtiene archivos PDF de una carpeta específica
      */
     async getFiles(folderType) {
         try {
-            console.log(`📁 Obteniendo archivos reales de ${folderType} desde Google Drive...`);
+            console.log(`📁 Obteniendo archivos de ${folderType} desde Google Drive...`);
 
-            // OBLIGATORIO: Autenticar usuario
-            await this.authenticate();
+            // Verificar autenticación
+            if (!this.isSignedIn || !this.accessToken) {
+                await this.authenticate();
+            }
 
             // Obtener ID de carpeta
             const folderId = this.getFolderId(folderType);
@@ -271,7 +319,7 @@ class DriveAPI {
 
             console.log(`🔍 Buscando PDFs en carpeta ${folderType} (${folderId})...`);
 
-            // Verificar acceso a la carpeta primero
+            // Verificar acceso a la carpeta
             try {
                 await this.gapi.client.drive.files.get({
                     fileId: folderId,
@@ -283,12 +331,10 @@ class DriveAPI {
                 throw new Error(`No tienes acceso a la carpeta ${folderType}. Verifica que sea pública o que tengas permisos.`);
             }
 
-            // Construir query para buscar PDFs en la carpeta
+            // Construir query para buscar PDFs
             const query = `'${folderId}' in parents and mimeType='application/pdf' and trashed=false`;
 
-            console.log(`🔍 Query: ${query}`);
-
-            // Realizar petición a Google Drive API
+            // Realizar petición
             const response = await this.gapi.client.drive.files.list({
                 q: query,
                 fields: 'files(id,name,size,modifiedTime,webViewLink,thumbnailLink,parents)',
@@ -305,11 +351,6 @@ class DriveAPI {
 
             if (files.length === 0) {
                 console.warn(`⚠️ No se encontraron archivos PDF en la carpeta ${folderType}`);
-                console.log(`🔗 Verificar carpeta: ${this.config.FOLDER_URLS[folderType.toUpperCase()]}`);
-                console.log(`💡 Asegúrate de que la carpeta contenga archivos PDF y sea accesible`);
-            } else {
-                // Log de algunos archivos encontrados
-                console.log(`📋 Primeros archivos encontrados:`, files.slice(0, 3).map(f => f.name));
             }
 
             // Procesar archivos
@@ -317,8 +358,6 @@ class DriveAPI {
 
         } catch (error) {
             console.error(`❌ Error obteniendo archivos de ${folderType}:`, error);
-            
-            // NO HAY FALLBACK - Lanzar error
             throw new Error(`No se pudieron cargar los archivos de ${folderType}: ${error.message}`);
         }
     }
@@ -331,15 +370,7 @@ class DriveAPI {
             'instrumentos': this.config.FOLDERS.INSTRUMENTOS,
             'voces': this.config.FOLDERS.VOCES
         };
-
-        const folderId = folderMap[folderType.toLowerCase()];
-        
-        if (!folderId) {
-            console.error(`❌ ID de carpeta no encontrado para: ${folderType}`);
-            console.log('📋 IDs disponibles:', this.config.FOLDERS);
-        }
-
-        return folderId;
+        return folderMap[folderType.toLowerCase()];
     }
 
     /**
@@ -372,10 +403,65 @@ class DriveAPI {
     }
 
     /**
-     * Obtiene la URL directa de visualización de un PDF
+     * Obtiene la URL directa de visualización
      */
     getViewerURL(fileId) {
         return `https://drive.google.com/file/d/${fileId}/preview`;
+    }
+
+    /**
+     * Muestra botón de autenticación
+     */
+    showAuthButton() {
+        const button = document.getElementById('auth-button');
+        if (button) {
+            button.style.display = 'inline-flex';
+            button.onclick = () => {
+                this.tokenClient.requestAccessToken({ prompt: 'consent' });
+            };
+        }
+        
+        // Mostrar panel de estado
+        const statusPanel = document.getElementById('connection-status');
+        if (statusPanel) {
+            statusPanel.classList.remove('hidden');
+            document.getElementById('status-title').textContent = 'Autorización Requerida';
+            document.getElementById('status-message').textContent = 'Haz clic en "Iniciar Sesión" para autorizar el acceso a Google Drive';
+        }
+    }
+
+    /**
+     * Oculta botón de autenticación
+     */
+    hideAuthButton() {
+        const button = document.getElementById('auth-button');
+        if (button) {
+            button.style.display = 'none';
+        }
+        
+        // Ocultar panel de estado
+        const statusPanel = document.getElementById('connection-status');
+        if (statusPanel) {
+            statusPanel.classList.add('hidden');
+        }
+    }
+
+    /**
+     * Muestra error de autenticación
+     */
+    showAuthError(message) {
+        const statusPanel = document.getElementById('connection-status');
+        if (statusPanel) {
+            statusPanel.classList.remove('hidden');
+            document.getElementById('status-title').textContent = 'Error de Autenticación';
+            document.getElementById('status-message').textContent = message;
+            
+            // Mostrar botón de retry
+            const retryButton = document.getElementById('retry-button');
+            if (retryButton) {
+                retryButton.style.display = 'inline-flex';
+            }
+        }
     }
 
     /**
@@ -385,9 +471,9 @@ class DriveAPI {
         return {
             isInitialized: this.isInitialized,
             isSignedIn: this.isSignedIn,
-            hasAuthInstance: !!this.authInstance,
+            hasAccessToken: !!this.accessToken,
+            hasTokenClient: !!this.tokenClient,
             hasGapi: !!this.gapi,
-            userInfo: this.getUserInfo(),
             config: {
                 hasApiKey: !!this.config.API_KEY,
                 hasClientId: !!this.config.CLIENT_ID,
@@ -397,10 +483,31 @@ class DriveAPI {
     }
 
     /**
-     * Test completo de la conexión
+     * Cierra sesión
+     */
+    async signOut() {
+        try {
+            if (this.accessToken) {
+                // Revocar token
+                google.accounts.oauth2.revoke(this.accessToken);
+                this.accessToken = null;
+                this.isSignedIn = false;
+                
+                // Limpiar token de GAPI
+                this.gapi.client.setToken(null);
+                
+                console.log('👋 Usuario desconectado');
+            }
+        } catch (error) {
+            console.error('❌ Error cerrando sesión:', error);
+        }
+    }
+
+    /**
+     * Test de conexión completo
      */
     async testConnection() {
-        console.log('🧪 INICIANDO TEST DE CONEXIÓN COMPLETO...');
+        console.log('🧪 INICIANDO TEST DE CONEXIÓN CON GIS...');
         
         try {
             // 1. Verificar configuración
@@ -409,7 +516,7 @@ class DriveAPI {
             console.log('📊 Estado actual:', status);
             
             // 2. Inicializar API
-            console.log('2️⃣ Inicializando Google API...');
+            console.log('2️⃣ Inicializando Google API con GIS...');
             await this.init();
             
             // 3. Autenticar
@@ -434,79 +541,30 @@ class DriveAPI {
             return false;
         }
     }
-
-    /**
-     * Obtiene información del usuario autenticado
-     */
-    getUserInfo() {
-        if (!this.isSignedIn || !this.authInstance) {
-            return null;
-        }
-
-        try {
-            const profile = this.authInstance.currentUser.get().getBasicProfile();
-            return {
-                id: profile.getId(),
-                name: profile.getName(),
-                email: profile.getEmail(),
-                imageUrl: profile.getImageUrl()
-            };
-        } catch (error) {
-            console.error('❌ Error obteniendo info de usuario:', error);
-            return null;
-        }
-    }
-
-    /**
-     * Limpia la autenticación
-     */
-    async signOut() {
-        try {
-            if (this.isInitialized && this.authInstance) {
-                await this.authInstance.signOut();
-                this.isSignedIn = false;
-                console.log('👋 Usuario desconectado');
-            }
-        } catch (error) {
-            console.error('❌ Error cerrando sesión:', error);
-        }
-    }
 }
 
-// === UTILIDADES ADICIONALES ===
+// === UTILIDADES ===
 const DriveUtils = {
-    /**
-     * Convierte ID de URL de Google Drive a ID de archivo
-     */
     extractFileId(url) {
         const match = url.match(/\/file\/d\/([a-zA-Z0-9-_]+)/);
         return match ? match[1] : null;
     },
 
-    /**
-     * Valida si un ID de carpeta es válido
-     */
     validateFolderId(folderId) {
         return /^[a-zA-Z0-9-_]{28,}$/.test(folderId);
     },
 
-    /**
-     * Genera URL de vista previa
-     */
     getPreviewUrl(fileId) {
         return `https://drive.google.com/file/d/${fileId}/preview`;
     },
 
-    /**
-     * Genera URL de descarga directa
-     */
     getDownloadUrl(fileId) {
         return `https://drive.google.com/uc?export=download&id=${fileId}`;
     }
 };
 
 // === EXPORTAR ===
-window.DriveAPI = DriveAPI;
+window.DriveAPIGIS = DriveAPIGIS;
 window.DriveUtils = DriveUtils;
 
-console.log('🚀 Drive API cargada: CONEXIÓN REAL MEJORADA');
+console.log('🚀 Drive API GIS cargada: NUEVA IMPLEMENTACIÓN CON GOOGLE IDENTITY SERVICES');

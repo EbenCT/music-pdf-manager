@@ -1,6 +1,6 @@
 /**
- * MUSIC PDF MANAGER - MAIN APPLICATION SCRIPT (SOLO GOOGLE DRIVE REAL)
- * Script principal que maneja EXCLUSIVAMENTE Google Drive API
+ * MUSIC PDF MANAGER - MAIN APPLICATION SCRIPT (Google Identity Services)
+ * Script principal actualizado para usar Google Identity Services (GIS)
  */
 
 // === ESTADO GLOBAL DE LA APLICACIÓN ===
@@ -35,7 +35,7 @@ class MusicPDFManager {
     async init() {
         try {
             console.log('🎵 Iniciando Music PDF Manager...');
-            console.log('☁️ Modo: SOLO GOOGLE DRIVE REAL');
+            console.log('☁️ Modo: GOOGLE DRIVE con Google Identity Services');
             
             // Verificar credenciales
             if (!this.config.credentialsValid) {
@@ -54,10 +54,10 @@ class MusicPDFManager {
             // Inicializar visualizador de PDF
             this.setupPDFViewer();
             
-            // Inicializar Google Drive API
+            // Inicializar Google Drive API con GIS
             await this.initializeDriveAPI();
             
-            // Cargar archivos
+            // Intentar cargar archivos
             await this.loadFiles();
             
             console.log('✅ Aplicación iniciada correctamente');
@@ -69,19 +69,19 @@ class MusicPDFManager {
     }
 
     /**
-     * Inicializa Google Drive API
+     * Inicializa Google Drive API con GIS
      */
     async initializeDriveAPI() {
         try {
-            console.log('🔧 Inicializando Google Drive API...');
+            console.log('🔧 Inicializando Google Drive API con GIS...');
             
-            this.driveAPI = new DriveAPI();
+            this.driveAPI = new DriveAPIGIS();
             AppState.driveAPI = this.driveAPI;
             
-            // Inicializar (esto cargará gapi pero no autenticará todavía)
+            // Inicializar (esto cargará gapi y GIS)
             await this.driveAPI.init();
             
-            console.log('✅ Google Drive API lista para autenticación');
+            console.log('✅ Google Drive API con GIS lista para autenticación');
             
         } catch (error) {
             console.error('❌ Error inicializando Drive API:', error);
@@ -109,6 +109,11 @@ class MusicPDFManager {
         if (zoomInBtn) zoomInBtn.addEventListener('click', () => this.zoomIn());
         if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => this.zoomOut());
         if (fullscreenBtn) fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+
+        // Escuchar eventos de autenticación
+        window.addEventListener('driveAuthSuccess', () => {
+            this.onAuthSuccess();
+        });
     }
 
     /**
@@ -146,10 +151,10 @@ class MusicPDFManager {
     }
 
     /**
-     * Carga archivos EXCLUSIVAMENTE desde Google Drive
+     * Carga archivos desde Google Drive con manejo de autenticación
      */
     async loadFiles() {
-        this.showLoading(true, 'Conectando con Google Drive...');
+        this.showLoading(true, 'Inicializando conexión con Google Drive...');
         
         try {
             console.log('📁 Cargando archivos desde Google Drive...');
@@ -160,10 +165,22 @@ class MusicPDFManager {
 
             // Mostrar mensaje de autenticación si es necesario
             if (!AppState.isAuthenticated) {
-                this.showLoading(true, 'Iniciando sesión con Google...');
+                this.showLoading(true, 'Autenticando con Google...');
+                
+                // Intentar autenticación automática
+                try {
+                    await this.driveAPI.authenticate();
+                } catch (authError) {
+                    console.log('⚠️ Autenticación manual requerida:', authError.message);
+                    this.showLoading(false);
+                    // La UI de autenticación se manejará por el DriveAPI
+                    return;
+                }
             }
 
             // Cargar ambas carpetas en paralelo
+            this.showLoading(true, 'Cargando archivos PDF...');
+            
             const [instrumentosFiles, vocesFiles] = await Promise.all([
                 this.driveAPI.getFiles('instrumentos'),
                 this.driveAPI.getFiles('voces')
@@ -183,9 +200,6 @@ class MusicPDFManager {
 
             console.log(`📊 Archivos cargados desde Drive: ${AppState.files.instrumentos.length} instrumentos, ${AppState.files.voces.length} voces`);
 
-            // Mostrar información del usuario
-            this.showUserInfo();
-
         } catch (error) {
             console.error('❌ Error cargando archivos:', error);
             this.showDriveError(error.message);
@@ -195,14 +209,59 @@ class MusicPDFManager {
     }
 
     /**
-     * Muestra información del usuario autenticado
+     * Maneja el éxito de autenticación
      */
-    showUserInfo() {
-        if (this.driveAPI) {
-            const userInfo = this.driveAPI.getUserInfo();
-            if (userInfo) {
-                console.log(`👤 Usuario autenticado: ${userInfo.name} (${userInfo.email})`);
+    onAuthSuccess() {
+        console.log('🎉 Autenticación exitosa, cargando archivos...');
+        AppState.isAuthenticated = true;
+        this.loadFiles();
+    }
+
+    /**
+     * Maneja errores de autenticación
+     */
+    onAuthError(errorMessage) {
+        console.error('❌ Error de autenticación:', errorMessage);
+        this.showAuthError(errorMessage);
+    }
+
+    /**
+     * Muestra error de autenticación
+     */
+    showAuthError(message) {
+        ['instrumentos', 'voces'].forEach(section => {
+            const container = document.getElementById(`${section}-list`);
+            if (container) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div style="font-size: 2rem; margin-bottom: var(--spacing-md);">🔐</div>
+                        <h3>Autenticación Requerida</h3>
+                        <p style="color: var(--accent-red); margin-bottom: var(--spacing-md);">${message}</p>
+                        <button class="btn" onclick="window.app.retryConnection()">
+                            🔐 Intentar Autenticación
+                        </button>
+                    </div>
+                `;
             }
+        });
+    }
+
+    /**
+     * Reintentar conexión
+     */
+    async retryConnection() {
+        console.log('🔄 Reintentando conexión...');
+        
+        try {
+            // Reinicializar API
+            await this.initializeDriveAPI();
+            
+            // Cargar archivos
+            await this.loadFiles();
+            
+        } catch (error) {
+            console.error('❌ Error en reintento:', error);
+            this.showDriveError(`Error al reconectar: ${error.message}`);
         }
     }
 
@@ -314,7 +373,7 @@ class MusicPDFManager {
     }
 
     /**
-     * Carga un PDF real desde Google Drive
+     * Carga un PDF desde Google Drive
      */
     async loadPDF(file) {
         try {
@@ -481,6 +540,7 @@ class MusicPDFManager {
                             <li>Verificar credenciales en Google Cloud Console</li>
                             <li>Comprobar que las carpetas de Drive sean accesibles</li>
                             <li>Asegurar que la URL esté en dominios autorizados</li>
+                            <li>Verificar que Google Identity Services esté habilitado</li>
                         </ol>
                     </div>
                     <button class="btn" onclick="location.reload()" style="margin-top: var(--spacing-lg);">
@@ -504,7 +564,7 @@ class MusicPDFManager {
                         <div style="font-size: 2rem; margin-bottom: var(--spacing-md);">☁️</div>
                         <h3>Error de Google Drive</h3>
                         <p style="color: var(--accent-red); margin-bottom: var(--spacing-md);">${message}</p>
-                        <button class="btn secondary" onclick="window.app.retryLoadFiles()">
+                        <button class="btn secondary" onclick="window.app.retryConnection()">
                             🔄 Intentar de nuevo
                         </button>
                     </div>
@@ -555,8 +615,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    if (typeof DriveAPI === 'undefined') {
-        console.error('❌ DriveAPI no está disponible');
+    if (typeof DriveAPIGIS === 'undefined') {
+        console.error('❌ DriveAPIGIS no está disponible');
         return;
     }
 
@@ -567,4 +627,4 @@ document.addEventListener('DOMContentLoaded', () => {
 // === EXPORTAR PARA DEBUGGING ===
 window.AppState = AppState;
 
-console.log('🚀 Main.js cargado: SOLO GOOGLE DRIVE REAL');
+console.log('🚀 Main.js cargado: GOOGLE DRIVE con Google Identity Services');
