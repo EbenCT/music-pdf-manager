@@ -1,6 +1,6 @@
 /**
- * MUSIC PDF MANAGER - PDF VIEWER CORREGIDO
- * Maneja la visualización de archivos PDF usando PDF.js con URLs directas de Google Drive
+ * MUSIC PDF MANAGER - PDF VIEWER MEJORADO
+ * Sistema de visualización PDF con manejo robusto de errores y DriveUtils
  */
 
 class PDFViewer {
@@ -33,7 +33,7 @@ class PDFViewer {
         this.setupCanvas();
         this.setupControls();
         this.setupKeyboardShortcuts();
-        console.log('📄 PDF Viewer inicializado');
+        console.log('📄 PDF Viewer inicializado con DriveUtils');
     }
 
     /**
@@ -57,24 +57,9 @@ class PDFViewer {
      * Configura los controles del visualizador
      */
     setupControls() {
-        // Navigation controls
         this.createNavigationControls();
-        
-        // Zoom controls (ya están en el HTML, solo agregar funcionalidad)
         this.setupZoomControls();
-        
-        // Download control
         this.setupDownloadControl();
-    }
-
-    /**
-     * Configura el control de descarga
-     */
-    setupDownloadControl() {
-        const downloadBtn = document.getElementById('download-pdf');
-        if (downloadBtn) {
-            downloadBtn.addEventListener('click', () => this.downloadCurrentPDF());
-        }
     }
 
     /**
@@ -111,7 +96,6 @@ class PDFViewer {
     setupZoomControls() {
         const zoomInBtn = document.getElementById('zoom-in');
         const zoomOutBtn = document.getElementById('zoom-out');
-        const zoomLevel = document.getElementById('zoom-level');
 
         if (zoomInBtn) {
             zoomInBtn.addEventListener('click', () => this.zoomIn());
@@ -178,7 +162,7 @@ class PDFViewer {
     }
 
     /**
-     * Carga un PDF desde una URL o archivo
+     * Carga un PDF desde una URL o archivo - MEJORADO CON DRIVEUTILS
      * @param {string|File} source - URL del PDF o objeto File
      * @param {Object} fileInfo - Información del archivo (opcional)
      */
@@ -189,29 +173,54 @@ class PDFViewer {
             // Guardar información del archivo
             this.currentFile = fileInfo;
             
-            // En modo desarrollo, mostrar placeholder
+            // En modo demo, mostrar placeholder
             if (typeof source === 'string' && source.includes('#demo-pdf-')) {
                 this.showDemoPlaceholder(source);
                 return;
             }
 
-            console.log('📄 Cargando PDF:', source);
+            console.log('📄 Cargando PDF:', fileInfo?.name || source);
 
-            // Verificar que PDF.js está disponible
+            // Verificar PDF.js
             if (typeof pdfjsLib === 'undefined') {
-                throw new Error('PDF.js no está cargado');
+                throw new Error('PDF.js no está disponible');
             }
 
             let pdfSource = source;
 
-            // Si es una URL de Google Drive, manejar con autorización
+            // Si es URL de Google Drive, manejar con autenticación usando DriveUtils
             if (typeof source === 'string' && source.includes('googleapis.com')) {
-                pdfSource = await this.handleGoogleDriveURL(source);
+                try {
+                    pdfSource = await this.handleGoogleDriveURL(source);
+                } catch (driveError) {
+                    console.error('❌ Error específico de Google Drive:', driveError);
+                    
+                    // Intentar método alternativo si falla el primero
+                    if (fileInfo && fileInfo.id) {
+                        console.log('🔄 Intentando método alternativo...');
+                        try {
+                            pdfSource = await this.tryAlternativeDownload(fileInfo.id);
+                        } catch (altError) {
+                            throw driveError; // Usar error original
+                        }
+                    } else {
+                        throw driveError;
+                    }
+                }
             }
 
-            // Cargar el documento PDF
-            const loadingTask = pdfjsLib.getDocument(pdfSource);
-            this.currentPDF = await loadingTask.promise;
+            // Configurar opciones de carga para PDF.js
+            const loadingTask = pdfjsLib.getDocument({
+                url: pdfSource,
+                verbosity: 0, // Reducir logs de PDF.js
+                cMapPacked: true,
+                cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/'
+            });
+
+            // Cargar documento con retry usando DriveUtils
+            this.currentPDF = await DriveUtils.retry(async () => {
+                return await loadingTask.promise;
+            }, 2, 1000);
             
             this.totalPages = this.currentPDF.numPages;
             this.currentPage = 1;
@@ -231,49 +240,127 @@ class PDFViewer {
 
         } catch (error) {
             console.error('❌ Error cargando PDF:', error);
-            this.showError(`No se pudo cargar el archivo PDF: ${error.message}`);
+            this.showError(DriveUtils.getFriendlyErrorMessage(error));
         }
     }
 
     /**
-     * Maneja URLs de Google Drive con autenticación
+     * Maneja URLs de Google Drive con autenticación - MEJORADO CON DRIVEUTILS
      */
     async handleGoogleDriveURL(url) {
         try {
-            console.log('🔐 Cargando PDF desde Google Drive con autenticación...');
+            console.log('🔐 Cargando PDF desde Google Drive...');
             
-            // Verificar que DriveAPI esté disponible
+            // Verificar DriveAPI usando DriveUtils
             const driveAPI = window.AppState?.driveAPI;
             if (!driveAPI || !driveAPI.isSignedIn) {
                 throw new Error('No hay sesión activa de Google Drive');
             }
 
-            // Extraer file ID de la URL
+            // Extraer file ID usando DriveUtils
             const fileIdMatch = url.match(/files\/([a-zA-Z0-9-_]+)/);
             if (!fileIdMatch) {
-                throw new Error('No se pudo extraer ID del archivo de la URL');
+                throw new Error('No se pudo extraer ID del archivo');
             }
 
             const fileId = fileIdMatch[1];
-            console.log('📋 File ID extraído:', fileId);
+            console.log('📋 File ID:', fileId);
 
-            // Descargar el archivo como blob
-            const blob = await driveAPI.downloadFileBlob(fileId);
-            
-            // Crear URL del blob
+            // Limpiar blob URL anterior usando DriveUtils
             if (this.currentBlobURL) {
-                URL.revokeObjectURL(this.currentBlobURL);
+                DriveUtils.revokeBlobURL(this.currentBlobURL);
+                this.currentBlobURL = null;
             }
+
+            // Descargar archivo con reintentos usando DriveUtils
+            const blob = await DriveUtils.retry(async () => {
+                return await driveAPI.downloadFileBlob(fileId);
+            }, 3, 1000);
             
-            this.currentBlobURL = URL.createObjectURL(blob);
-            console.log('✅ Blob URL creada para PDF');
+            // Verificar que sea un PDF válido
+            if (blob.type && !blob.type.includes('pdf')) {
+                console.warn('⚠️ Archivo no es PDF:', blob.type);
+            }
+
+            // Crear blob URL usando DriveUtils
+            this.currentBlobURL = DriveUtils.createBlobURL(blob);
+            console.log('✅ Blob URL creada:', blob.size, 'bytes');
             
             return this.currentBlobURL;
 
         } catch (error) {
-            console.error('❌ Error manejando URL de Google Drive:', error);
-            throw new Error(`Error cargando desde Google Drive: ${error.message}`);
+            console.error('❌ Error procesando Google Drive URL:', error);
+            
+            // Limpiar estado usando DriveUtils
+            if (this.currentBlobURL) {
+                DriveUtils.revokeBlobURL(this.currentBlobURL);
+                this.currentBlobURL = null;
+            }
+            
+            // Error específico para usuario usando DriveUtils
+            throw new Error(DriveUtils.getFriendlyErrorMessage(error));
         }
+    }
+
+    /**
+     * Método alternativo de descarga cuando falla el principal - MEJORADO
+     */
+    async tryAlternativeDownload(fileId) {
+        console.log('🔄 Probando descarga alternativa...');
+        
+        const driveAPI = window.AppState?.driveAPI;
+        if (!driveAPI) {
+            throw new Error('DriveAPI no disponible');
+        }
+
+        // Intentar URL pública primero
+        try {
+            const publicUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${driveAPI.config.API_KEY}`;
+            
+            const response = await fetch(publicUrl);
+            if (response.ok) {
+                const blob = await response.blob();
+                
+                if (this.currentBlobURL) {
+                    DriveUtils.revokeBlobURL(this.currentBlobURL);
+                }
+                
+                this.currentBlobURL = DriveUtils.createBlobURL(blob);
+                console.log('✅ Descarga alternativa exitosa');
+                return this.currentBlobURL;
+            }
+        } catch (publicError) {
+            console.log('⚠️ Descarga pública falló:', publicError);
+        }
+
+        // Si falla, intentar con método GAPI
+        try {
+            console.log('🔄 Intentando con GAPI...');
+            
+            const response = await driveAPI.driveAuth.gapi.client.drive.files.get({
+                fileId: fileId,
+                alt: 'media'
+            });
+
+            if (response.body) {
+                const blob = new Blob([response.body], { type: 'application/pdf' });
+                
+                if (this.currentBlobURL) {
+                    DriveUtils.revokeBlobURL(this.currentBlobURL);
+                }
+                
+                this.currentBlobURL = DriveUtils.createBlobURL(blob);
+                console.log('✅ Descarga con GAPI exitosa');
+                return this.currentBlobURL;
+            }
+            
+        } catch (gapiError) {
+            console.log('⚠️ GAPI falló:', gapiError);
+        }
+
+        // Último recurso: mostrar URL de viewer
+        const viewerUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+        throw new Error(`No se pudo cargar el PDF directamente. Puedes intentar abrirlo en: ${viewerUrl}`);
     }
 
     /**
@@ -323,7 +410,7 @@ class PDFViewer {
     }
 
     /**
-     * Descarga el PDF actual
+     * Descarga el PDF actual - MEJORADO CON DRIVEUTILS
      */
     async downloadCurrentPDF() {
         try {
@@ -346,22 +433,13 @@ class PDFViewer {
             downloadBtn.disabled = true;
 
             try {
-                // Descargar archivo
-                const blob = await driveAPI.downloadFileBlob(this.currentFile.id);
+                // Descargar archivo con retry usando DriveUtils
+                const blob = await DriveUtils.retry(async () => {
+                    return await driveAPI.downloadFileBlob(this.currentFile.id);
+                }, 3, 1000);
                 
-                // Crear enlace de descarga
-                const url = URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = this.currentFile.name;
-                
-                // Simular click para descargar
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                
-                // Limpiar URL del blob
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                // Crear enlace de descarga usando PDFUtils
+                PDFUtils.downloadBlob(blob, this.currentFile.name);
                 
                 console.log('✅ Descarga iniciada');
 
@@ -431,7 +509,7 @@ class PDFViewer {
     }
 
     /**
-     * Muestra error
+     * Muestra error con DriveUtils
      */
     showError(message) {
         this.container.innerHTML = `
@@ -639,12 +717,12 @@ class PDFViewer {
     }
 
     /**
-     * Limpia el visualizador
+     * Limpia el visualizador usando DriveUtils
      */
     clear() {
-        // Limpiar blob URL si existe
+        // Limpiar blob URL usando DriveUtils
         if (this.currentBlobURL) {
-            URL.revokeObjectURL(this.currentBlobURL);
+            DriveUtils.revokeBlobURL(this.currentBlobURL);
             this.currentBlobURL = null;
         }
 
@@ -671,9 +749,9 @@ class PDFViewer {
      * Destruye el visualizador y limpia eventos
      */
     destroy() {
-        // Limpiar blob URL
+        // Limpiar blob URL usando DriveUtils
         if (this.currentBlobURL) {
-            URL.revokeObjectURL(this.currentBlobURL);
+            DriveUtils.revokeBlobURL(this.currentBlobURL);
         }
 
         // Limpiar PDF
@@ -688,7 +766,7 @@ class PDFViewer {
     }
 }
 
-// === UTILIDADES PARA PDF ===
+// === UTILIDADES PARA PDF MEJORADAS ===
 const PDFUtils = {
     /**
      * Valida si un archivo es PDF
@@ -711,10 +789,10 @@ const PDFUtils = {
     },
 
     /**
-     * Crea función de descarga para un blob
+     * Crea función de descarga para un blob usando DriveUtils
      */
     downloadBlob(blob, filename) {
-        const url = URL.createObjectURL(blob);
+        const url = DriveUtils.createBlobURL(blob);
         const link = document.createElement('a');
         link.href = url;
         link.download = filename;
@@ -723,45 +801,42 @@ const PDFUtils = {
         link.click();
         document.body.removeChild(link);
         
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-    }
-};
+        // Limpiar URL después de un delay usando DriveUtils
+        setTimeout(() => DriveUtils.revokeBlobURL(url), 1000);
+    },
 
-// === FUNCIÓN DE DEBUG PARA CONEXIÓN ===
-window.debugDriveConnection = function() {
-    console.log('🔧 DEBUG DE CONEXIÓN A GOOGLE DRIVE:');
-    
-    const driveAPI = window.AppState?.driveAPI;
-    if (!driveAPI) {
-        console.error('❌ DriveAPI no disponible');
-        return;
-    }
-    
-    console.log('📊 Estado de DriveAPI:', driveAPI.getConnectionStatus());
-    
-    if (driveAPI.isSignedIn) {
-        console.log('✅ Usuario autenticado');
-        console.log('🔑 Token válido:', driveAPI.isTokenValid());
-        
-        // Test de descarga de un archivo
-        const files = window.AppState?.files;
-        if (files && files.instrumentos && files.instrumentos.length > 0) {
-            const testFile = files.instrumentos[0];
-            console.log('🧪 Probando descarga de archivo:', testFile.name);
-            
-            driveAPI.downloadFileBlob(testFile.id)
-                .then(blob => {
-                    console.log('✅ Test de descarga exitoso:', blob.size, 'bytes');
-                })
-                .catch(error => {
-                    console.error('❌ Test de descarga falló:', error);
-                });
+    /**
+     * Verifica capacidad de PDF.js
+     */
+    checkPDFSupport() {
+        return typeof pdfjsLib !== 'undefined';
+    },
+
+    /**
+     * Obtiene metadatos de PDF
+     */
+    async getPDFMetadata(pdfDocument) {
+        try {
+            const metadata = await pdfDocument.getMetadata();
+            return {
+                title: metadata.info.Title || 'Sin título',
+                author: metadata.info.Author || 'Sin autor',
+                subject: metadata.info.Subject || '',
+                creator: metadata.info.Creator || '',
+                producer: metadata.info.Producer || '',
+                creationDate: metadata.info.CreationDate || null,
+                modDate: metadata.info.ModDate || null,
+                pages: pdfDocument.numPages
+            };
+        } catch (error) {
+            console.error('❌ Error obteniendo metadatos PDF:', error);
+            return null;
         }
-    } else {
-        console.error('❌ Usuario no autenticado');
     }
 };
 
 // === EXPORTAR ===
 window.PDFViewer = PDFViewer;
 window.PDFUtils = PDFUtils;
+
+console.log('📄 PDF Viewer cargado: VERSIÓN MEJORADA con DriveUtils');

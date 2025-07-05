@@ -1,6 +1,6 @@
 /**
- * MUSIC PDF MANAGER - SEARCH FUNCTIONALITY
- * Maneja la funcionalidad de búsqueda avanzada y filtrado
+ * MUSIC PDF MANAGER - SEARCH FUNCTIONALITY (REFACTORIZADO)
+ * Sistema de búsqueda simplificado que usa SearchUtils
  */
 
 class SearchManager {
@@ -10,6 +10,7 @@ class SearchManager {
         this.searchTimeout = null;
         this.isSearching = false;
         this.lastQuery = '';
+        this.smartFilter = null;
         
         // Configuración
         this.config = window.APP_CONFIG?.SEARCH || {
@@ -34,37 +35,39 @@ class SearchManager {
             return;
         }
 
+        // Inicializar filtro inteligente con SearchUtils
+        if (typeof SearchUtils !== 'undefined') {
+            this.smartFilter = SearchUtils.createSmartFilter();
+            console.log('🔍 Search Manager inicializado con SearchUtils');
+        } else {
+            console.warn('⚠️ SearchUtils no disponible, usando búsqueda básica');
+        }
+
         this.setupEventListeners();
         this.setupKeyboardShortcuts();
-        
-        console.log('🔍 Search Manager inicializado');
     }
 
     /**
      * Configura event listeners
      */
     setupEventListeners() {
-        // Input de búsqueda con debounce
+        // Input con debounce
         this.searchInput.addEventListener('input', (e) => {
             this.handleSearchInput(e.target.value);
         });
 
-        // Focus y blur del input
-        this.searchInput.addEventListener('focus', () => {
-            this.onSearchFocus();
-        });
-
+        // Focus y blur
+        this.searchInput.addEventListener('focus', () => this.onSearchFocus());
         this.searchInput.addEventListener('blur', (e) => {
-            // Pequeño delay para permitir clics en resultados
             setTimeout(() => this.onSearchBlur(e), 150);
         });
 
-        // Navegación con teclado en resultados
+        // Navegación con teclado
         this.searchInput.addEventListener('keydown', (e) => {
             this.handleKeyNavigation(e);
         });
 
-        // Click fuera para cerrar resultados
+        // Click fuera para cerrar
         document.addEventListener('click', (e) => {
             if (!e.target.closest('.search-container')) {
                 this.hideResults();
@@ -91,51 +94,40 @@ class SearchManager {
     }
 
     /**
-     * Maneja el input de búsqueda con debounce
+     * Maneja input con debounce
      */
     handleSearchInput(query) {
-        // Limpiar timeout anterior
         if (this.searchTimeout) {
             clearTimeout(this.searchTimeout);
         }
 
-        // Debounce para evitar búsquedas excesivas
         this.searchTimeout = setTimeout(() => {
             this.performSearch(query);
         }, this.config.DEBOUNCE_DELAY);
     }
 
     /**
-     * Realiza la búsqueda
+     * Realiza la búsqueda usando SearchUtils
      */
     async performSearch(query) {
         const trimmedQuery = query.trim();
         
-        // Validar longitud mínima
         if (trimmedQuery.length < this.config.MIN_QUERY_LENGTH) {
             this.clearResults();
             this.updateGlobalFilter('');
             return;
         }
 
-        // Evitar búsquedas repetidas
-        if (trimmedQuery === this.lastQuery) {
-            return;
-        }
+        if (trimmedQuery === this.lastQuery) return;
 
         this.lastQuery = trimmedQuery;
         this.isSearching = true;
 
         try {
-            console.log(`🔍 Buscando: "${trimmedQuery}"`);
+            console.log(`🔍 Buscando con SearchUtils: "${trimmedQuery}"`);
 
-            // Realizar búsqueda
             const results = await this.search(trimmedQuery);
-            
-            // Mostrar resultados
             this.displayResults(results, trimmedQuery);
-            
-            // Actualizar filtro global
             this.updateGlobalFilter(trimmedQuery);
 
         } catch (error) {
@@ -147,161 +139,85 @@ class SearchManager {
     }
 
     /**
-     * Busca en todas las fuentes disponibles
+     * Búsqueda usando SearchUtils
      */
     async search(query) {
+        const files = window.AppState?.files || { instrumentos: [], voces: [] };
+        const allFiles = [];
+
+        // Combinar archivos con información de sección
+        files.instrumentos.forEach(file => {
+            allFiles.push({
+                ...file,
+                section: 'instrumentos',
+                sectionName: 'Instrumentos'
+            });
+        });
+
+        files.voces.forEach(file => {
+            allFiles.push({
+                ...file,
+                section: 'voces',
+                sectionName: 'Voces'
+            });
+        });
+
+        // Usar SearchUtils si está disponible
+        if (this.smartFilter && typeof SearchUtils !== 'undefined') {
+            const searchResults = this.smartFilter.search(query, allFiles, {
+                fields: ['name'],
+                maxResults: this.config.MAX_RESULTS,
+                minScore: 15
+            });
+
+            return searchResults.map(result => ({
+                ...result.item,
+                score: result.score,
+                matchType: result.matchType
+            }));
+        } else {
+            // Fallback a búsqueda básica
+            return this.basicSearch(query, allFiles);
+        }
+    }
+
+    /**
+     * Búsqueda básica sin SearchUtils (fallback)
+     */
+    basicSearch(query, files) {
         const results = [];
         const lowerQuery = query.toLowerCase();
 
-        // Obtener archivos del estado global
-        const files = window.AppState?.files || { instrumentos: [], voces: [] };
+        files.forEach(file => {
+            const lowerName = file.name.toLowerCase();
+            let score = 0;
+            let matchType = 'none';
 
-        // Buscar en instrumentos
-        files.instrumentos.forEach(file => {
-            const score = this.calculateRelevanceScore(file.name, lowerQuery);
+            if (lowerName === lowerQuery) {
+                score = 100;
+                matchType = 'exact';
+            } else if (lowerName.startsWith(lowerQuery)) {
+                score = 90;
+                matchType = 'startsWith';
+            } else if (lowerName.includes(lowerQuery)) {
+                score = 80;
+                matchType = 'contains';
+            }
+
             if (score > 0) {
                 results.push({
                     ...file,
-                    section: 'instrumentos',
-                    sectionName: 'Instrumentos',
-                    score: score,
-                    matchType: this.getMatchType(file.name, lowerQuery)
+                    score,
+                    matchType
                 });
             }
         });
 
-        // Buscar en voces
-        files.voces.forEach(file => {
-            const score = this.calculateRelevanceScore(file.name, lowerQuery);
-            if (score > 0) {
-                results.push({
-                    ...file,
-                    section: 'voces',
-                    sectionName: 'Voces',
-                    score: score,
-                    matchType: this.getMatchType(file.name, lowerQuery)
-                });
-            }
-        });
-
-        // Ordenar por relevancia
-        results.sort((a, b) => {
-            // Primero por tipo de coincidencia
-            if (a.matchType !== b.matchType) {
-                const typeOrder = { exact: 0, startsWith: 1, contains: 2, fuzzy: 3 };
-                return typeOrder[a.matchType] - typeOrder[b.matchType];
-            }
-            // Luego por score
-            return b.score - a.score;
-        });
-
-        // Limitar resultados
-        return results.slice(0, this.config.MAX_RESULTS);
+        return results.sort((a, b) => b.score - a.score).slice(0, this.config.MAX_RESULTS);
     }
 
     /**
-     * Calcula la puntuación de relevancia
-     */
-    calculateRelevanceScore(text, query) {
-        const lowerText = text.toLowerCase();
-        
-        // Coincidencia exacta
-        if (lowerText === query) {
-            return 100;
-        }
-
-        // Comienza con la query
-        if (lowerText.startsWith(query)) {
-            return 90;
-        }
-
-        // Contiene la query completa
-        if (lowerText.includes(query)) {
-            return 80;
-        }
-
-        // Búsqueda fuzzy por palabras
-        const words = query.split(' ').filter(w => w.length > 1);
-        let matchCount = 0;
-        
-        words.forEach(word => {
-            if (lowerText.includes(word)) {
-                matchCount++;
-            }
-        });
-
-        if (matchCount > 0) {
-            return Math.floor((matchCount / words.length) * 70);
-        }
-
-        // Búsqueda por caracteres similares
-        const similarity = this.calculateStringSimilarity(lowerText, query);
-        if (similarity > this.config.FUZZY_THRESHOLD) {
-            return Math.floor(similarity * 60);
-        }
-
-        return 0;
-    }
-
-    /**
-     * Determina el tipo de coincidencia
-     */
-    getMatchType(text, query) {
-        const lowerText = text.toLowerCase();
-        
-        if (lowerText === query) return 'exact';
-        if (lowerText.startsWith(query)) return 'startsWith';
-        if (lowerText.includes(query)) return 'contains';
-        
-        return 'fuzzy';
-    }
-
-    /**
-     * Calcula similitud entre strings (algoritmo simple)
-     */
-    calculateStringSimilarity(str1, str2) {
-        const longer = str1.length > str2.length ? str1 : str2;
-        const shorter = str1.length > str2.length ? str2 : str1;
-        
-        if (longer.length === 0) return 1.0;
-        
-        const distance = this.levenshteinDistance(longer, shorter);
-        return (longer.length - distance) / longer.length;
-    }
-
-    /**
-     * Distancia de Levenshtein (para búsqueda fuzzy)
-     */
-    levenshteinDistance(str1, str2) {
-        const matrix = [];
-        
-        for (let i = 0; i <= str2.length; i++) {
-            matrix[i] = [i];
-        }
-        
-        for (let j = 0; j <= str1.length; j++) {
-            matrix[0][j] = j;
-        }
-        
-        for (let i = 1; i <= str2.length; i++) {
-            for (let j = 1; j <= str1.length; j++) {
-                if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-                    matrix[i][j] = matrix[i - 1][j - 1];
-                } else {
-                    matrix[i][j] = Math.min(
-                        matrix[i - 1][j - 1] + 1,
-                        matrix[i][j - 1] + 1,
-                        matrix[i - 1][j] + 1
-                    );
-                }
-            }
-        }
-        
-        return matrix[str2.length][str1.length];
-    }
-
-    /**
-     * Muestra los resultados de búsqueda
+     * Muestra resultados usando SearchUtils para highlighting
      */
     displayResults(results, query) {
         if (results.length === 0) {
@@ -322,10 +238,8 @@ class SearchManager {
                     <div class="search-result-section">
                         ${result.sectionName} • ${result.size}
                         ${this.getMatchBadge(result.matchType)}
+                        ${this.getScoreIndicator(result.score)}
                     </div>
-                </div>
-                <div class="search-result-score" title="Relevancia: ${result.score}%">
-                    ${this.getScoreStars(result.score)}
                 </div>
             </div>
         `).join('');
@@ -336,22 +250,21 @@ class SearchManager {
     }
 
     /**
-     * Resalta las coincidencias en el texto
+     * Resalta coincidencias usando SearchUtils si está disponible
      */
     highlightMatches(text, query) {
-        if (!query) return text;
-
-        // Escapar caracteres especiales de regex
-        const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        
-        // Crear regex case-insensitive
-        const regex = new RegExp(`(${escapedQuery})`, 'gi');
-        
-        return text.replace(regex, '<span class="search-result-match">$1</span>');
+        if (typeof SearchUtils !== 'undefined') {
+            return SearchUtils.highlightMatches(text, query, 'search-result-match');
+        } else {
+            // Fallback básico
+            if (!query || query.length < 2) return text;
+            const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+            return text.replace(regex, '<span class="search-result-match">$1</span>');
+        }
     }
 
     /**
-     * Obtiene el icono según el tipo de archivo
+     * Obtiene icono según tipo de archivo
      */
     getFileIcon(file) {
         if (file.section === 'instrumentos') {
@@ -363,13 +276,14 @@ class SearchManager {
     }
 
     /**
-     * Obtiene badge según el tipo de coincidencia
+     * Obtiene badge según tipo de coincidencia
      */
     getMatchBadge(matchType) {
         const badges = {
             exact: '<span class="match-badge exact" title="Coincidencia exacta">💯</span>',
             startsWith: '<span class="match-badge starts" title="Comienza con">▶️</span>',
             contains: '<span class="match-badge contains" title="Contiene">🔍</span>',
+            partial: '<span class="match-badge partial" title="Coincidencia parcial">📝</span>',
             fuzzy: '<span class="match-badge fuzzy" title="Coincidencia aproximada">≈</span>'
         };
         
@@ -377,49 +291,54 @@ class SearchManager {
     }
 
     /**
-     * Obtiene estrellas según la puntuación
+     * Obtiene indicador de score
      */
-    getScoreStars(score) {
-        if (score >= 90) return '⭐⭐⭐';
-        if (score >= 70) return '⭐⭐';
-        if (score >= 50) return '⭐';
+    getScoreIndicator(score) {
+        if (score >= 90) return '<span class="score-indicator high" title="Alta relevancia">⭐⭐⭐</span>';
+        if (score >= 70) return '<span class="score-indicator medium" title="Media relevancia">⭐⭐</span>';
+        if (score >= 50) return '<span class="score-indicator low" title="Baja relevancia">⭐</span>';
         return '';
     }
 
     /**
-     * Adjunta event listeners a los resultados
+     * Adjunta event listeners a resultados
      */
     attachResultListeners() {
         this.searchResults.querySelectorAll('.search-result-item').forEach((item, index) => {
             item.addEventListener('click', () => {
                 this.selectResult(item);
             });
-
-            // Agregar atributo para navegación con teclado
             item.setAttribute('data-index', index);
         });
     }
 
     /**
-     * Selecciona un resultado de búsqueda
+     * Selecciona resultado y agrega al historial
      */
     selectResult(item) {
         const fileId = item.dataset.fileId;
         const section = item.dataset.section;
+
+        // Encontrar el archivo completo
+        const files = window.AppState?.files || {};
+        const file = files[section]?.find(f => f.id === fileId);
+
+        if (file && this.smartFilter) {
+            // Agregar al historial de búsqueda inteligente
+            this.smartFilter.addToHistory(this.lastQuery, file);
+        }
 
         // Llamar al método de selección del app principal
         if (window.app && typeof window.app.selectFile === 'function') {
             window.app.selectFile(fileId, section);
         }
 
-        // Ocultar resultados
         this.hideResults();
-
         console.log(`✅ Resultado seleccionado: ${fileId} (${section})`);
     }
 
     /**
-     * Maneja navegación con teclado en resultados
+     * Navegación con teclado mejorada
      */
     handleKeyNavigation(e) {
         if (!this.searchResults.classList.contains('show')) return;
@@ -466,15 +385,10 @@ class SearchManager {
 
         // Actualizar item activo
         if (newActiveIndex >= 0 && items[newActiveIndex]) {
-            // Remover clase anterior
             if (currentActive) {
                 currentActive.classList.remove('keyboard-active');
             }
-
-            // Agregar clase nueva
             items[newActiveIndex].classList.add('keyboard-active');
-            
-            // Scroll si es necesario
             items[newActiveIndex].scrollIntoView({
                 block: 'nearest',
                 behavior: 'smooth'
@@ -491,7 +405,9 @@ class SearchManager {
                 <span class="search-result-icon">🔍</span>
                 <div class="search-result-info">
                     <div class="search-result-name">Sin resultados para "${query}"</div>
-                    <div class="search-result-section">Prueba con otros términos o revisa la ortografía</div>
+                    <div class="search-result-section">
+                        Prueba con otros términos o revisa la ortografía
+                    </div>
                 </div>
             </div>
         `;
@@ -515,13 +431,12 @@ class SearchManager {
     }
 
     /**
-     * Actualiza el filtro global de archivos
+     * Actualiza filtro global
      */
     updateGlobalFilter(query) {
         if (window.AppState) {
             window.AppState.searchQuery = query;
             
-            // Notificar al app principal para actualizar las listas
             if (window.app && typeof window.app.handleSearch === 'function') {
                 window.app.handleSearch(query);
             }
@@ -529,35 +444,27 @@ class SearchManager {
     }
 
     /**
-     * Muestra los resultados
+     * Muestra/oculta resultados
      */
     showResults() {
         this.searchResults.classList.add('show');
     }
 
-    /**
-     * Oculta los resultados
-     */
     hideResults() {
         this.searchResults.classList.remove('show');
-        
-        // Remover navegación por teclado
         const activeItem = this.searchResults.querySelector('.keyboard-active');
         if (activeItem) {
             activeItem.classList.remove('keyboard-active');
         }
     }
 
-    /**
-     * Limpia los resultados
-     */
     clearResults() {
         this.searchResults.innerHTML = '';
         this.hideResults();
     }
 
     /**
-     * Enfoca el input de búsqueda
+     * Limpia y enfoca búsqueda
      */
     focusSearch() {
         if (this.searchInput) {
@@ -566,9 +473,6 @@ class SearchManager {
         }
     }
 
-    /**
-     * Limpia la búsqueda
-     */
     clearSearch() {
         if (this.searchInput) {
             this.searchInput.value = '';
@@ -578,21 +482,13 @@ class SearchManager {
         }
     }
 
-    /**
-     * Maneja el focus del input
-     */
     onSearchFocus() {
-        // Si hay texto y resultados previos, mostrarlos
         if (this.searchInput.value.trim() && this.searchResults.innerHTML) {
             this.showResults();
         }
     }
 
-    /**
-     * Maneja el blur del input
-     */
     onSearchBlur(e) {
-        // Solo ocultar si no se está interactuando con los resultados
         if (!e.relatedTarget || !e.relatedTarget.closest('.search-results')) {
             this.hideResults();
         }
@@ -602,91 +498,235 @@ class SearchManager {
      * Obtiene estadísticas de búsqueda
      */
     getSearchStats() {
-        return {
+        const baseStats = {
             lastQuery: this.lastQuery,
             isSearching: this.isSearching,
             hasResults: this.searchResults.classList.contains('show'),
             resultCount: this.searchResults.querySelectorAll('.search-result-item').length
         };
+
+        // Agregar stats de SearchUtils si está disponible
+        if (this.smartFilter && typeof SearchUtils !== 'undefined') {
+            baseStats.smartFilterStats = SearchUtils.generateSearchStats(this.smartFilter.history);
+        }
+
+        return baseStats;
     }
-}
-
-// === UTILIDADES DE BÚSQUEDA ===
-const SearchUtils = {
-    /**
-     * Normaliza texto para búsqueda (remueve acentos, etc.)
-     */
-    normalizeText(text) {
-        return text
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^\w\s]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-    },
 
     /**
-     * Extrae palabras clave de un texto
+     * Obtiene sugerencias basadas en input actual
      */
-    extractKeywords(text, minLength = 3) {
-        const normalized = this.normalizeText(text);
-        const words = normalized.split(' ');
+    getSuggestions(partialQuery) {
+        if (typeof SearchUtils === 'undefined') {
+            return [];
+        }
+
+        const files = window.AppState?.files || { instrumentos: [], voces: [] };
+        const allFiles = [...files.instrumentos, ...files.voces];
         
-        return words
-            .filter(word => word.length >= minLength)
-            .filter((word, index, array) => array.indexOf(word) === index);
-    },
+        return SearchUtils.generateSuggestions(partialQuery, allFiles, 5);
+    }
 
     /**
-     * Busca texto en contenido PDF (placeholder para futuro)
+     * Debug de estado de búsqueda
      */
-    async searchInPDFContent(pdfFile, query) {
-        // Esta función se implementaría para buscar dentro del contenido de PDFs
-        console.log('🔍 Búsqueda en contenido PDF no implementada aún');
-        return [];
+    debugSearchState() {
+        console.group('🔍 DEBUG SEARCH STATE');
+        console.log('Search Manager:', {
+            lastQuery: this.lastQuery,
+            isSearching: this.isSearching,
+            hasSmartFilter: !!this.smartFilter,
+            hasSearchUtils: typeof SearchUtils !== 'undefined'
+        });
+        
+        if (this.smartFilter) {
+            console.log('Smart Filter History:', this.smartFilter.history.length, 'items');
+            console.log('Recent searches:', this.smartFilter.history.slice(-5));
+        }
+        
+        console.log('Current Stats:', this.getSearchStats());
+        console.groupEnd();
     }
-};
 
-// === ESTILOS ADICIONALES PARA BÚSQUEDA ===
-const searchCSS = `
-.search-result-item.keyboard-active {
-    background: var(--medium-gray) !important;
-    border-left: 3px solid var(--accent-red);
-}
+    /**
+     * Exporta historial de búsqueda
+     */
+    exportSearchHistory() {
+        if (!this.smartFilter) {
+            console.warn('⚠️ No hay historial de búsqueda para exportar');
+            return null;
+        }
 
-.search-result-score {
-    display: flex;
-    align-items: center;
-    font-size: 0.8rem;
-    color: var(--text-muted);
-}
+        const exportData = {
+            history: this.smartFilter.history,
+            stats: this.getSearchStats(),
+            exportDate: new Date().toISOString(),
+            version: '1.0.0'
+        };
 
-.match-badge {
-    display: inline-block;
-    margin-left: var(--spacing-xs);
-    font-size: 0.7rem;
-}
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `music-pdf-search-history-${Date.now()}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
 
-.search-result-item.no-results,
-.search-result-item.error {
-    cursor: default;
-}
+        console.log('📥 Historial de búsqueda exportado');
+        return exportData;
+    }
 
-.search-result-item.no-results:hover,
-.search-result-item.error:hover {
-    background: transparent !important;
-}
-`;
+    /**
+     * Importa historial de búsqueda
+     */
+    importSearchHistory(data) {
+        if (!data || !data.history || !this.smartFilter) {
+            console.error('❌ Datos de importación inválidos');
+            return false;
+        }
 
-// Agregar estilos adicionales
-if (!document.querySelector('#search-styles')) {
-    const style = document.createElement('style');
-    style.id = 'search-styles';
-    style.textContent = searchCSS;
-    document.head.appendChild(style);
+        try {
+            this.smartFilter.history = data.history;
+            console.log('✅ Historial de búsqueda importado:', data.history.length, 'items');
+            return true;
+        } catch (error) {
+            console.error('❌ Error importando historial:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Limpia historial de búsqueda
+     */
+    clearSearchHistory() {
+        if (this.smartFilter) {
+            this.smartFilter.history = [];
+            console.log('🗑️ Historial de búsqueda limpiado');
+        }
+    }
+
+    /**
+     * Obtiene archivos más buscados
+     */
+    getMostSearchedFiles(limit = 10) {
+        if (!this.smartFilter) return [];
+
+        const fileCount = {};
+        
+        this.smartFilter.history.forEach(item => {
+            if (item.selectedItem) {
+                const fileName = item.selectedItem.name;
+                fileCount[fileName] = (fileCount[fileName] || 0) + 1;
+            }
+        });
+
+        return Object.entries(fileCount)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, limit)
+            .map(([name, count]) => ({ name, count }));
+    }
+
+    /**
+     * Obtiene términos de búsqueda más frecuentes
+     */
+    getMostFrequentQueries(limit = 10) {
+        if (!this.smartFilter) return [];
+
+        const queryCount = {};
+        
+        this.smartFilter.history.forEach(item => {
+            const query = item.query.toLowerCase();
+            queryCount[query] = (queryCount[query] || 0) + 1;
+        });
+
+        return Object.entries(queryCount)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, limit)
+            .map(([query, count]) => ({ query, count }));
+    }
+
+    /**
+     * Obtiene métricas de rendimiento de búsqueda
+     */
+    getPerformanceMetrics() {
+        return {
+            totalSearches: this.smartFilter?.history.length || 0,
+            averageQueryLength: this.calculateAverageQueryLength(),
+            searchSuccessRate: this.calculateSearchSuccessRate(),
+            mostActiveSearchDay: this.getMostActiveSearchDay(),
+            searchTrends: this.getSearchTrends()
+        };
+    }
+
+    /**
+     * Calcula longitud promedio de query
+     */
+    calculateAverageQueryLength() {
+        if (!this.smartFilter || this.smartFilter.history.length === 0) return 0;
+
+        const totalLength = this.smartFilter.history.reduce((sum, item) => sum + item.query.length, 0);
+        return Math.round(totalLength / this.smartFilter.history.length * 100) / 100;
+    }
+
+    /**
+     * Calcula tasa de éxito de búsquedas
+     */
+    calculateSearchSuccessRate() {
+        if (!this.smartFilter || this.smartFilter.history.length === 0) return 0;
+
+        const successfulSearches = this.smartFilter.history.filter(item => item.selectedItem).length;
+        return Math.round((successfulSearches / this.smartFilter.history.length) * 100);
+    }
+
+    /**
+     * Obtiene día más activo de búsqueda
+     */
+    getMostActiveSearchDay() {
+        if (!this.smartFilter || this.smartFilter.history.length === 0) return null;
+
+        const dayCount = {};
+        
+        this.smartFilter.history.forEach(item => {
+            const day = new Date(item.timestamp).toDateString();
+            dayCount[day] = (dayCount[day] || 0) + 1;
+        });
+
+        const mostActive = Object.entries(dayCount)
+            .sort(([,a], [,b]) => b - a)[0];
+
+        return mostActive ? { day: mostActive[0], searches: mostActive[1] } : null;
+    }
+
+    /**
+     * Obtiene tendencias de búsqueda
+     */
+    getSearchTrends() {
+        if (!this.smartFilter || this.smartFilter.history.length === 0) return [];
+
+        const last30Days = this.smartFilter.history.filter(item => 
+            Date.now() - new Date(item.timestamp).getTime() <= 30 * 24 * 60 * 60 * 1000
+        );
+
+        const trendsMap = {};
+        last30Days.forEach(item => {
+            const words = item.query.toLowerCase().split(' ');
+            words.forEach(word => {
+                if (word.length > 2) {
+                    trendsMap[word] = (trendsMap[word] || 0) + 1;
+                }
+            });
+        });
+
+        return Object.entries(trendsMap)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 10)
+            .map(([word, count]) => ({ word, count }));
+    }
 }
 
 // === EXPORTAR ===
 window.SearchManager = SearchManager;
-window.SearchUtils = SearchUtils;
+
+console.log('🔍 Search Manager cargado: VERSIÓN REFACTORIZADA con SearchUtils');

@@ -26,7 +26,8 @@
             https://content.googleapis.com
             https://www.google.com
             https://drive.google.com
-            https://lh3.googleusercontent.com; 
+            https://lh3.googleusercontent.com
+            blob: data:; 
         frame-src 'self' 
             https://accounts.google.com 
             https://drive.google.com
@@ -311,9 +312,18 @@
         setTimeout(checkGoogleIdentityServices, 1000);
     </script>
     
+    <!-- 1. Configuración -->
     <script src="config/drive-config.js"></script>
+    
+    <!-- 2. Módulos de Drive (orden importante) -->
+    <script src="js/drive-utils.js"></script>
+    <script src="js/drive-auth.js"></script>
+    <script src="js/drive-files.js"></script>
     <script src="js/drive-api.js"></script>
+    
+    <!-- 3. Otros módulos -->
     <script src="js/pdf-viewer.js"></script>
+    <script src="js/search-utils.js"></script>
     <script src="js/search.js"></script>
     <script src="js/main.js"></script>
     
@@ -322,8 +332,12 @@
         window.addEventListener('load', function() {
             console.log('🔍 Verificando carga de scripts...');
             console.log('📊 ConfigUtils:', typeof ConfigUtils !== 'undefined' ? '✅' : '❌');
+            console.log('📊 DriveUtils:', typeof DriveUtils !== 'undefined' ? '✅' : '❌');
+            console.log('📊 DriveAuth:', typeof DriveAuth !== 'undefined' ? '✅' : '❌');
+            console.log('📊 DriveFiles:', typeof DriveFiles !== 'undefined' ? '✅' : '❌');
             console.log('📊 DriveAPIGIS:', typeof DriveAPIGIS !== 'undefined' ? '✅' : '❌');
             console.log('📊 PDFViewer:', typeof PDFViewer !== 'undefined' ? '✅' : '❌');
+            console.log('📊 SearchUtils:', typeof SearchUtils !== 'undefined' ? '✅' : '❌');
             console.log('📊 SearchManager:', typeof SearchManager !== 'undefined' ? '✅' : '❌');
             console.log('📊 Google Identity:', typeof google !== 'undefined' && google.accounts ? '✅' : '❌');
         });

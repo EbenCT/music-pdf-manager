@@ -1,6 +1,6 @@
 /**
  * MUSIC PDF MANAGER - MAIN APPLICATION SCRIPT
- * Versión corregida con manejo de eventos mejorado
+ * Versión refactorizada con módulos especializados
  */
 
 // === ESTADO GLOBAL DE LA APLICACIÓN ===
@@ -21,24 +21,24 @@ const AppState = {
     driveAPI: null,
     isAuthenticated: false,
     lastAuthCheck: null,
-    isLoadingFiles: false // ✅ AGREGADO para evitar cargas múltiples
+    isLoadingFiles: false
 };
 
 // === CONTROLADOR PRINCIPAL DE LA APLICACIÓN ===
 class MusicPDFManager {
     constructor() {
         this.config = ConfigUtils.getConfig();
-        this.authEventHandled = false; // ✅ AGREGADO para evitar múltiples handlers
+        this.authEventHandled = false;
         this.init();
     }
 
     /**
-     * Inicializa la aplicación
+     * Inicializa la aplicación con módulos refactorizados
      */
     async init() {
         try {
-            console.log('🎵 Iniciando Music PDF Manager...');
-            console.log('☁️ Modo: GOOGLE DRIVE con Google Identity Services');
+            console.log('🎵 Iniciando Music PDF Manager (Refactorizado)...');
+            console.log('☁️ Modo: GOOGLE DRIVE con módulos especializados');
             
             // Verificar credenciales
             if (!this.config.credentialsValid) {
@@ -51,64 +51,65 @@ class MusicPDFManager {
             // Configurar PDF.js
             this.setupPDFJS();
             
-            // Inicializar búsqueda
+            // Inicializar módulos
             this.setupSearch();
-            
-            // Inicializar visualizador de PDF
             this.setupPDFViewer();
             
-            // Inicializar Google Drive API con GIS
+            // Inicializar Google Drive API refactorizada
             await this.initializeDriveAPI();
             
-            // Intentar autenticación automática con token guardado
+            // Intentar autenticación automática
             await this.tryAutoAuthentication();
             
-            console.log('✅ Aplicación inicializada correctamente');
+            console.log('✅ Aplicación refactorizada inicializada correctamente');
             
         } catch (error) {
-            console.error('❌ Error al inicializar la aplicación:', error);
+            console.error('❌ Error al inicializar aplicación:', error);
             this.showCriticalError(error.message);
         }
     }
 
     /**
-     * Inicializa Google Drive API con GIS
+     * Inicializa Google Drive API refactorizada
      */
     async initializeDriveAPI() {
         try {
-            console.log('🔧 Inicializando Google Drive API con GIS...');
+            console.log('🔧 Inicializando Google Drive API refactorizada...');
+            
+            // Verificar que los módulos estén disponibles
+            if (!window.DriveAPIGIS) {
+                throw new Error('DriveAPIGIS no está disponible');
+            }
             
             this.driveAPI = new DriveAPIGIS();
             AppState.driveAPI = this.driveAPI;
             
-            // Inicializar (esto cargará gapi y GIS)
+            // Inicializar con módulos
             await this.driveAPI.init();
             
-            console.log('✅ Google Drive API con GIS lista');
+            console.log('✅ Google Drive API refactorizada lista');
             
         } catch (error) {
-            console.error('❌ Error inicializando Drive API:', error);
+            console.error('❌ Error inicializando Drive API refactorizada:', error);
             throw new Error(`Error configurando Google Drive: ${error.message}`);
         }
     }
 
     /**
-     * Intenta autenticación automática con token guardado
+     * Intenta autenticación automática
      */
     async tryAutoAuthentication() {
         try {
             console.log('🔄 Verificando autenticación automática...');
             
-            // Si el DriveAPI ya detectó un token válido durante init
             if (this.driveAPI.isSignedIn && this.driveAPI.isTokenValid()) {
-                console.log('✅ Token válido encontrado, cargando archivos automáticamente...');
+                console.log('✅ Token válido encontrado, cargando archivos...');
                 AppState.isAuthenticated = true;
                 this.driveAPI.updateAuthStatus(true);
                 await this.loadFiles();
                 return;
             }
 
-            // No hay token válido, mostrar botón de auth
             console.log('⚠️ No hay token válido, se requiere autenticación manual');
             this.showAuthRequired();
             
@@ -127,7 +128,7 @@ class MusicPDFManager {
     }
 
     /**
-     * Configura todos los event listeners - CORREGIDO
+     * Configura event listeners
      */
     setupEventListeners() {
         // Navigation tabs
@@ -147,19 +148,19 @@ class MusicPDFManager {
         if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => this.zoomOut());
         if (fullscreenBtn) fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
 
-        // ✅ CRÍTICO: Escuchar evento de autenticación SOLO UNA VEZ
+        // Event listener de autenticación
         this.setupAuthEventListener();
 
-        // Verificar periódicamente el estado del token
+        // Timer de validación de token
         this.startTokenValidationTimer();
     }
 
     /**
-     * ✅ NUEVO: Configura el listener de autenticación de forma segura
+     * Configura listener de autenticación de forma segura
      */
     setupAuthEventListener() {
         if (this.authEventHandled) {
-            console.log('⚠️ Event listener de auth ya configurado, saltando...');
+            console.log('⚠️ Event listener de auth ya configurado');
             return;
         }
 
@@ -168,9 +169,8 @@ class MusicPDFManager {
         const authHandler = (event) => {
             console.log('📢 Evento driveAuthSuccess recibido');
             
-            // Prevenir múltiples ejecuciones
             if (AppState.isLoadingFiles) {
-                console.log('⚠️ Ya se están cargando archivos, ignorando evento...');
+                console.log('⚠️ Ya se están cargando archivos, ignorando...');
                 return;
             }
 
@@ -184,10 +184,9 @@ class MusicPDFManager {
     }
 
     /**
-     * Inicia timer para verificar validez del token
+     * Timer para verificar validez del token
      */
     startTokenValidationTimer() {
-        // Verificar cada 10 minutos
         setInterval(() => {
             if (this.driveAPI && AppState.isAuthenticated) {
                 if (!this.driveAPI.isTokenValid()) {
@@ -199,7 +198,7 @@ class MusicPDFManager {
     }
 
     /**
-     * Maneja la expiración del token
+     * Maneja expiración del token
      */
     handleTokenExpired() {
         AppState.isAuthenticated = false;
@@ -226,7 +225,6 @@ class MusicPDFManager {
      * Cambia entre módulos
      */
     switchModule(moduleName) {
-        // Actualizar estado
         AppState.currentModule = moduleName;
 
         // Actualizar tabs
@@ -245,10 +243,9 @@ class MusicPDFManager {
     }
 
     /**
-     * Carga archivos desde Google Drive - CORREGIDO
+     * Carga archivos desde Google Drive con módulos refactorizados
      */
     async loadFiles() {
-        // ✅ Prevenir carga múltiple
         if (AppState.isLoadingFiles) {
             console.log('⚠️ Ya se están cargando archivos, ignorando...');
             return;
@@ -258,10 +255,10 @@ class MusicPDFManager {
         this.showLoading(true, 'Cargando archivos PDF desde Google Drive...');
         
         try {
-            console.log('📁 Cargando archivos desde Google Drive...');
+            console.log('📁 Cargando archivos con módulos refactorizados...');
 
             if (!this.driveAPI) {
-                throw new Error('Google Drive API no está inicializada');
+                throw new Error('Google Drive API no inicializada');
             }
 
             if (!AppState.isAuthenticated || !this.driveAPI.isSignedIn || !this.driveAPI.isTokenValid()) {
@@ -270,7 +267,7 @@ class MusicPDFManager {
 
             console.log('📋 Estado de autenticación verificado - cargando archivos...');
             
-            // Cargar ambas carpetas en paralelo
+            // Cargar ambas carpetas en paralelo usando módulos
             const [instrumentosFiles, vocesFiles] = await Promise.all([
                 this.driveAPI.getFiles('instrumentos'),
                 this.driveAPI.getFiles('voces')
@@ -293,7 +290,7 @@ class MusicPDFManager {
 
         } catch (error) {
             console.error('❌ Error cargando archivos:', error);
-            this.showDriveError(error.message);
+            this.showDriveError(DriveUtils.getFriendlyErrorMessage(error));
         } finally {
             AppState.isLoadingFiles = false;
             this.showLoading(false);
@@ -325,7 +322,6 @@ class MusicPDFManager {
                 if (currentPDFTitle) {
                     currentPDFTitle.textContent = 'Selecciona un archivo PDF para visualizar';
                 }
-                // Las listas ya se actualizan en updateFileLists()
                 break;
         }
     }
@@ -354,12 +350,11 @@ class MusicPDFManager {
     }
 
     /**
-     * Maneja el éxito de autenticación - CORREGIDO
+     * Maneja éxito de autenticación
      */
     async onAuthSuccess() {
         console.log('🎉 Procesando éxito de autenticación...');
         
-        // ✅ Evitar procesamiento múltiple
         if (AppState.isLoadingFiles) {
             console.log('⚠️ Ya se están procesando archivos, ignorando...');
             return;
@@ -386,7 +381,7 @@ class MusicPDFManager {
     }
 
     /**
-     * Maneja el cierre de sesión
+     * Maneja cierre de sesión
      */
     onSignOut() {
         console.log('👋 Usuario cerró sesión');
@@ -395,12 +390,10 @@ class MusicPDFManager {
         AppState.files = { instrumentos: [], voces: [] };
         AppState.filteredFiles = { instrumentos: [], voces: [] };
         
-        // Limpiar visualizador PDF
         if (this.pdfViewer) {
             this.pdfViewer.clear();
         }
         
-        // Actualizar UI
         this.updateUI('auth-required');
     }
 
@@ -432,14 +425,10 @@ class MusicPDFManager {
         console.log('🔄 Reintentando conexión...');
         
         try {
-            // Limpiar estado previo
             AppState.isAuthenticated = false;
             AppState.isLoadingFiles = false;
             
-            // Reinicializar API
             await this.initializeDriveAPI();
-            
-            // Intentar autenticación
             await this.driveAPI.authenticate();
             
         } catch (error) {
@@ -455,7 +444,6 @@ class MusicPDFManager {
         AppState.files.instrumentos.sort((a, b) => a.name.localeCompare(b.name, 'es'));
         AppState.files.voces.sort((a, b) => a.name.localeCompare(b.name, 'es'));
         
-        // Actualizar también los archivos filtrados
         AppState.filteredFiles.instrumentos = [...AppState.files.instrumentos];
         AppState.filteredFiles.voces = [...AppState.files.voces];
     }
@@ -495,7 +483,7 @@ class MusicPDFManager {
                 <div class="pdf-item-info">
                     <div class="pdf-item-name">${this.highlightSearchTerms(file.name)}</div>
                     <div class="pdf-item-meta">
-                        ${file.size} • ${ConfigUtils.formatDate(file.modifiedTime)}
+                        ${file.size} • ${DriveUtils.formatDate(file.modifiedTime)}
                     </div>
                 </div>
             </div>
@@ -516,23 +504,17 @@ class MusicPDFManager {
      */
     highlightSearchTerms(text) {
         if (!AppState.searchQuery || AppState.searchQuery.length < 2) return text;
-
-        const regex = new RegExp(`(${AppState.searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-        return text.replace(regex, '<span class="search-result-match">$1</span>');
+        return SearchUtils.highlightMatches(text, AppState.searchQuery, 'search-result-match');
     }
 
     /**
      * Selecciona un archivo PDF
      */
     selectFile(fileId, section) {
-        // Encontrar el archivo
         const file = AppState.files[section].find(f => f.id === fileId);
         if (!file) return;
 
-        // Actualizar estado
         AppState.currentPDF = file;
-
-        // Actualizar UI
         this.updateActiveFile(fileId);
         this.loadPDF(file);
 
@@ -543,12 +525,10 @@ class MusicPDFManager {
      * Actualiza el archivo activo visualmente
      */
     updateActiveFile(fileId) {
-        // Remover estado activo de todos los items
         document.querySelectorAll('.pdf-item').forEach(item => {
             item.classList.remove('active');
         });
 
-        // Agregar estado activo al item seleccionado
         const activeItem = document.querySelector(`[data-file-id="${fileId}"]`);
         if (activeItem) {
             activeItem.classList.add('active');
@@ -562,12 +542,9 @@ class MusicPDFManager {
         try {
             console.log(`📄 Cargando PDF desde Google Drive: ${file.name}`);
             
-            // Actualizar título
             document.getElementById('current-pdf-title').textContent = file.name;
 
-            // Usar el PDFViewer para cargar el archivo
             if (this.pdfViewer) {
-                // Pasar tanto la URL como la información del archivo
                 await this.pdfViewer.loadPDF(file.downloadUrl, file);
             } else {
                 this.showPDFError('Visualizador PDF no disponible');
@@ -575,7 +552,7 @@ class MusicPDFManager {
 
         } catch (error) {
             console.error('❌ Error cargando PDF:', error);
-            this.showPDFError(`Error cargando PDF: ${error.message}`);
+            this.showPDFError(DriveUtils.getFriendlyErrorMessage(error));
         }
     }
 
@@ -602,17 +579,15 @@ class MusicPDFManager {
     }
 
     /**
-     * Maneja la búsqueda
+     * Maneja la búsqueda con SearchUtils
      */
     handleSearch(query) {
         AppState.searchQuery = query.toLowerCase().trim();
 
         if (AppState.searchQuery.length < this.config.app.SEARCH.MIN_QUERY_LENGTH) {
-            // Mostrar todos los archivos
             AppState.filteredFiles.instrumentos = [...AppState.files.instrumentos];
             AppState.filteredFiles.voces = [...AppState.files.voces];
         } else {
-            // Filtrar archivos
             this.filterFiles();
         }
 
@@ -621,18 +596,17 @@ class MusicPDFManager {
     }
 
     /**
-     * Filtra archivos según la búsqueda
+     * Filtra archivos usando SearchUtils
      */
     filterFiles() {
         const query = AppState.searchQuery;
 
-        AppState.filteredFiles.instrumentos = AppState.files.instrumentos.filter(file =>
-            file.name.toLowerCase().includes(query)
-        );
+        // Usar SearchUtils para filtrado más inteligente
+        const instrumentosResults = SearchUtils.multiCriteriaSearch(query, AppState.files.instrumentos, ['name']);
+        const vocesResults = SearchUtils.multiCriteriaSearch(query, AppState.files.voces, ['name']);
 
-        AppState.filteredFiles.voces = AppState.files.voces.filter(file =>
-            file.name.toLowerCase().includes(query)
-        );
+        AppState.filteredFiles.instrumentos = instrumentosResults.map(result => result.item);
+        AppState.filteredFiles.voces = vocesResults.map(result => result.item);
     }
 
     /**
@@ -662,7 +636,7 @@ class MusicPDFManager {
         if (!AppState.isAuthenticated) {
             await this.retryConnection();
         } else {
-            AppState.isLoadingFiles = false; // Reset flag
+            AppState.isLoadingFiles = false;
             await this.loadFiles();
         }
     }
@@ -735,7 +709,7 @@ class MusicPDFManager {
                             <li>Verificar credenciales en Google Cloud Console</li>
                             <li>Comprobar que las carpetas de Drive sean accesibles</li>
                             <li>Asegurar que la URL esté en dominios autorizados</li>
-                            <li>Verificar que Google Identity Services esté habilitado</li>
+                            <li>Verificar que todos los módulos estén cargados</li>
                         </ol>
                     </div>
                     <button class="btn" onclick="location.reload()" style="margin-top: var(--spacing-lg);">
@@ -750,7 +724,6 @@ class MusicPDFManager {
      * Muestra error específico de Google Drive
      */
     showDriveError(message) {
-        // Mostrar en las listas
         ['instrumentos', 'voces'].forEach(section => {
             const container = document.getElementById(`${section}-list`);
             if (container) {
@@ -772,7 +745,6 @@ class MusicPDFManager {
             }
         });
 
-        // Log detallado
         console.error('❌ Error de Google Drive:', message);
         if (this.driveAPI) {
             console.log('🔍 Estado de conexión:', this.driveAPI.getConnectionStatus());
@@ -784,7 +756,7 @@ class MusicPDFManager {
      */
     setupSearch() {
         this.searchManager = new SearchManager();
-        console.log('🔍 Sistema de búsqueda configurado');
+        console.log('🔍 Sistema de búsqueda configurado con SearchUtils');
     }
 
     /**
@@ -808,35 +780,37 @@ class MusicPDFManager {
 
 // === INICIALIZACIÓN DE LA APLICACIÓN ===
 document.addEventListener('DOMContentLoaded', () => {
-    // Verificar que todas las dependencias estén cargadas
+    // Verificar dependencias refactorizadas
     const dependencies = [
         { name: 'ConfigUtils', obj: typeof ConfigUtils !== 'undefined' },
+        { name: 'DriveUtils', obj: typeof DriveUtils !== 'undefined' },
+        { name: 'DriveAuth', obj: typeof DriveAuth !== 'undefined' },
+        { name: 'DriveFiles', obj: typeof DriveFiles !== 'undefined' },
+        { name: 'DriveAPIGIS', obj: typeof DriveAPIGIS !== 'undefined' },
+        { name: 'SearchUtils', obj: typeof SearchUtils !== 'undefined' },
         { name: 'SearchManager', obj: typeof SearchManager !== 'undefined' },
         { name: 'PDFViewer', obj: typeof PDFViewer !== 'undefined' },
-        { name: 'DriveAPIGIS', obj: typeof DriveAPIGIS !== 'undefined' },
         { name: 'Google Identity', obj: typeof google !== 'undefined' && google.accounts }
     ];
 
-    console.log('🔍 Verificando dependencias...');
+    console.log('🔍 Verificando dependencias refactorizadas...');
     const missingDeps = dependencies.filter(dep => !dep.obj);
     
     if (missingDeps.length > 0) {
         console.error('❌ Dependencias faltantes:', missingDeps.map(d => d.name));
         
-        // Mostrar error en la UI
         document.querySelector('.main-content').innerHTML = `
             <div style="text-align: center; padding: var(--spacing-xxl); color: var(--accent-red);">
-                <div style="font-size: 4rem; margin-bottom: var(--spacing-lg);">📄</div>
-                <h2>Error de Dependencias</h2>
-                <p style="margin-bottom: var(--spacing-lg);">Faltan dependencias requeridas: ${missingDeps.map(d => d.name).join(', ')}</p>
+                <div style="font-size: 4rem; margin-bottom: var(--spacing-lg);">🔧</div>
+                <h2>Error de Módulos</h2>
+                <p style="margin-bottom: var(--spacing-lg);">Faltan módulos requeridos: ${missingDeps.map(d => d.name).join(', ')}</p>
                 <div style="background: var(--dark-gray); padding: var(--spacing-lg); border-radius: var(--radius-md); max-width: 600px; margin: 0 auto;">
-                    <h3 style="color: var(--text-primary); margin-bottom: var(--spacing-md);">Pasos para solucionar:</h3>
-                    <ol style="text-align: left; color: var(--text-secondary);">
-                        <li>Verificar que todos los archivos .js estén presentes</li>
-                        <li>Comprobar que se carguen en el orden correcto</li>
-                        <li>Revisar la configuración del servidor web</li>
-                        <li>Verificar la consola para errores específicos</li>
-                    </ol>
+                    <h3 style="color: var(--text-primary); margin-bottom: var(--spacing-md);">Módulos verificados:</h3>
+                    <ul style="text-align: left; color: var(--text-secondary);">
+                        ${dependencies.map(dep => 
+                            `<li>${dep.name}: ${dep.obj ? '✅' : '❌'}</li>`
+                        ).join('')}
+                    </ul>
                 </div>
                 <button class="btn" onclick="location.reload()" style="margin-top: var(--spacing-lg);">
                     🔄 Reintentar
@@ -846,21 +820,19 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    console.log('✅ Todas las dependencias verificadas');
+    console.log('✅ Todos los módulos verificados');
 
-    // Inicializar la aplicación
+    // Inicializar aplicación
     window.app = new MusicPDFManager();
 });
 
 // === EXPORTAR PARA DEBUGGING ===
 window.AppState = AppState;
 
-// === DEBUG DE ESTADO GLOBAL ===
+// === DEBUG DE ESTADO GLOBAL MEJORADO ===
 window.debugAppState = function() {
-    console.log('🔍 DEBUG DE ESTADO GLOBAL:');
-    console.log('📊 AppState:', AppState);
-    console.log('📊 DriveAPI Status:', AppState.driveAPI?.getConnectionStatus());
-    console.log('📊 PDF Viewer Info:', AppState.pdfViewer?.getPDFInfo());
+    console.group('🔍 DEBUG DE ESTADO GLOBAL - MÓDULOS REFACTORIZADOS');
+    
     console.log('📊 Archivos cargados:', {
         instrumentos: AppState.files.instrumentos.length,
         voces: AppState.files.voces.length
@@ -870,7 +842,212 @@ window.debugAppState = function() {
         isLoadingFiles: AppState.isLoadingFiles,
         authEventHandled: window.app?.authEventHandled
     });
+    
+    // Debug específico de módulos
+    if (AppState.driveAPI) {
+        console.log('🔐 Auth Module:', AppState.driveAPI.driveAuth?.getConnectionStatus());
+        console.log('📁 Files Module Status:', AppState.driveAPI.driveFiles ? 'Loaded' : 'Not loaded');
+    }
+    
+    // Cache info
+    console.log('💾 Cache Size:', DriveUtils.cache.size());
+    
+    // Browser support
+    console.log('🌐 Browser Support:', DriveUtils.checkBrowserSupport());
+    
+    console.groupEnd();
 };
 
-console.log('🚀 Main.js cargado: VERSIÓN CORREGIDA - Event handling arreglado');
-console.log('🔧 Funciones de debug disponibles: debugAppState(), debugDriveConnection()');
+// === FUNCIÓN DE TESTING COMPLETO ===
+window.testCompleteSystem = async function() {
+    console.group('🧪 TESTING SISTEMA COMPLETO');
+    
+    try {
+        // 1. Test de módulos
+        console.log('1️⃣ Testing módulos...');
+        const modules = ['DriveUtils', 'DriveAuth', 'DriveFiles', 'DriveAPIGIS', 'PDFViewer', 'SearchManager', 'SearchUtils'];
+        modules.forEach(module => {
+            console.log(`  ${module}: ${typeof window[module] !== 'undefined' ? '✅' : '❌'}`);
+        });
+        
+        // 2. Test de configuración
+        console.log('2️⃣ Testing configuración...');
+        console.log('  Config válida:', ConfigUtils.areCredentialsValid());
+        console.log('  IDs válidos:', ConfigUtils.areFolderIdsValid());
+        
+        // 3. Test de conexión si está disponible
+        if (window.app && window.app.driveAPI) {
+            console.log('3️⃣ Testing conexión...');
+            const testResult = await window.app.driveAPI.testConnection();
+            console.log('  Test resultado:', testResult ? '✅' : '❌');
+        }
+        
+        console.log('🎉 Test completo finalizado');
+        
+    } catch (error) {
+        console.error('❌ Error en testing:', error);
+    }
+    
+    console.groupEnd();
+};
+
+// === FUNCIÓN DE DEBUG PARA BÚSQUEDA ===
+window.debugSearchState = function() {
+    if (window.app && window.app.searchManager) {
+        window.app.searchManager.debugSearchState();
+    } else {
+        console.log('❌ SearchManager no disponible');
+    }
+};
+
+// === FUNCIÓN DE LIMPIEZA DE CACHE ===
+window.clearAppCache = function() {
+    console.log('🗑️ Limpiando cache de la aplicación...');
+    
+    if (DriveUtils && DriveUtils.cache) {
+        DriveUtils.cache.clear();
+        console.log('✅ Cache de DriveUtils limpiado');
+    }
+    
+    if (window.app && window.app.searchManager && window.app.searchManager.clearSearchHistory) {
+        window.app.searchManager.clearSearchHistory();
+        console.log('✅ Historial de búsqueda limpiado');
+    }
+    
+    // Limpiar localStorage relacionado con la app (excepto tokens de auth)
+    const keysToKeep = ['gdrive_access_token', 'gdrive_token_expiry', 'gdrive_user_info'];
+    Object.keys(localStorage).forEach(key => {
+        if (!keysToKeep.includes(key)) {
+            localStorage.removeItem(key);
+        }
+    });
+    
+    console.log('✅ Cache de aplicación limpiado completamente');
+};
+
+// === FUNCIÓN DE EXPORTAR CONFIGURACIÓN ===
+window.exportAppConfig = function() {
+    const config = {
+        driveConfig: window.DRIVE_CONFIG,
+        appConfig: window.APP_CONFIG,
+        timestamp: new Date().toISOString(),
+        version: '1.0.0-refactored'
+    };
+    
+    const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `music-pdf-manager-config-${Date.now()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    console.log('📥 Configuración exportada');
+};
+
+// === FUNCIÓN DE ESTADÍSTICAS DE LA APLICACIÓN ===
+window.getAppStatistics = function() {
+    const stats = {
+        files: {
+            total: AppState.files.instrumentos.length + AppState.files.voces.length,
+            instrumentos: AppState.files.instrumentos.length,
+            voces: AppState.files.voces.length
+        },
+        authentication: {
+            isAuthenticated: AppState.isAuthenticated,
+            hasValidToken: AppState.driveAPI?.isTokenValid() || false,
+            lastAuthCheck: AppState.lastAuthCheck
+        },
+        search: window.app?.searchManager?.getSearchStats() || null,
+        browser: DriveUtils?.checkBrowserSupport() || null,
+        performance: {
+            isLoading: AppState.isLoading,
+            isLoadingFiles: AppState.isLoadingFiles,
+            lastUpdate: Date.now()
+        }
+    };
+    
+    console.group('📊 ESTADÍSTICAS DE LA APLICACIÓN');
+    console.table(stats.files);
+    console.log('🔐 Autenticación:', stats.authentication);
+    console.log('🔍 Búsqueda:', stats.search);
+    console.log('🌐 Navegador:', stats.browser);
+    console.log('⚡ Rendimiento:', stats.performance);
+    console.groupEnd();
+    
+    return stats;
+};
+
+// === FUNCIÓN DE HEALTH CHECK ===
+window.healthCheck = async function() {
+    console.group('🏥 HEALTH CHECK DEL SISTEMA');
+    
+    const health = {
+        modules: {},
+        apis: {},
+        storage: {},
+        overall: 'unknown'
+    };
+    
+    // Check modules
+    const modules = ['ConfigUtils', 'DriveUtils', 'DriveAuth', 'DriveFiles', 'DriveAPIGIS', 'SearchUtils', 'SearchManager', 'PDFViewer'];
+    modules.forEach(module => {
+        health.modules[module] = typeof window[module] !== 'undefined';
+    });
+    
+    // Check APIs
+    health.apis.googleIdentity = typeof google !== 'undefined' && !!google.accounts;
+    health.apis.pdfjs = typeof pdfjsLib !== 'undefined';
+    
+    // Check storage
+    try {
+        localStorage.setItem('test', 'test');
+        localStorage.removeItem('test');
+        health.storage.localStorage = true;
+    } catch (e) {
+        health.storage.localStorage = false;
+    }
+    
+    // Check Drive connection
+    if (AppState.driveAPI) {
+        try {
+            health.apis.driveConnection = AppState.driveAPI.isSignedIn && AppState.driveAPI.isTokenValid();
+        } catch (e) {
+            health.apis.driveConnection = false;
+        }
+    }
+    
+    // Overall health
+    const moduleHealth = Object.values(health.modules).every(Boolean);
+    const apiHealth = Object.values(health.apis).every(Boolean);
+    const storageHealth = Object.values(health.storage).every(Boolean);
+    
+    if (moduleHealth && apiHealth && storageHealth) {
+        health.overall = 'healthy';
+        console.log('✅ Sistema completamente saludable');
+    } else if (moduleHealth && storageHealth) {
+        health.overall = 'degraded';
+        console.log('⚠️ Sistema parcialmente funcional');
+    } else {
+        health.overall = 'unhealthy';
+        console.log('❌ Sistema con problemas críticos');
+    }
+    
+    console.log('Health Status:', health);
+    console.groupEnd();
+    
+    return health;
+};
+
+console.log('🚀 Main.js cargado: VERSIÓN REFACTORIZADA - Módulos separados');
+console.log('🔧 Funciones disponibles:');
+console.log('  - debugAppState() - Debug completo del estado');
+console.log('  - debugDriveConnection() - Debug específico de Google Drive'); 
+console.log('  - testCompleteSystem() - Test completo del sistema');
+console.log('  - debugSearchState() - Debug del sistema de búsqueda');
+console.log('  - clearAppCache() - Limpiar cache de la aplicación');
+console.log('  - exportAppConfig() - Exportar configuración');
+console.log('  - getAppStatistics() - Estadísticas de la aplicación');
+console.log('  - healthCheck() - Verificación de salud del sistema');
