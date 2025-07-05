@@ -59,7 +59,7 @@ class PDFViewer {
     setupControls() {
         this.createNavigationControls();
         this.setupZoomControls();
-        this.setupDownloadControl();
+        this.setupDownloadControl(); // FUNCIÓN AGREGADA
     }
 
     /**
@@ -102,6 +102,19 @@ class PDFViewer {
         }
         if (zoomOutBtn) {
             zoomOutBtn.addEventListener('click', () => this.zoomOut());
+        }
+    }
+
+    /**
+     * Configura control de descarga - FUNCIÓN AGREGADA
+     */
+    setupDownloadControl() {
+        const downloadBtn = document.getElementById('download-pdf');
+        if (downloadBtn) {
+            downloadBtn.addEventListener('click', () => this.downloadCurrentPDF());
+            console.log('📥 Control de descarga configurado');
+        } else {
+            console.warn('⚠️ Botón de descarga no encontrado en el DOM');
         }
     }
 
@@ -428,6 +441,11 @@ class PDFViewer {
 
             // Mostrar indicador de descarga
             const downloadBtn = document.getElementById('download-pdf');
+            if (!downloadBtn) {
+                console.warn('⚠️ Botón de descarga no encontrado');
+                return;
+            }
+
             const originalText = downloadBtn.innerHTML;
             downloadBtn.innerHTML = '⏳';
             downloadBtn.disabled = true;
@@ -454,12 +472,14 @@ class PDFViewer {
             
             // Mostrar error temporal en el botón
             const downloadBtn = document.getElementById('download-pdf');
-            const originalText = downloadBtn.innerHTML;
-            downloadBtn.innerHTML = '❌';
-            setTimeout(() => {
-                downloadBtn.innerHTML = originalText;
-                downloadBtn.disabled = false;
-            }, 2000);
+            if (downloadBtn) {
+                const originalText = downloadBtn.innerHTML;
+                downloadBtn.innerHTML = '❌';
+                setTimeout(() => {
+                    downloadBtn.innerHTML = originalText;
+                    downloadBtn.disabled = false;
+                }, 2000);
+            }
         }
     }
 
@@ -839,4 +859,4 @@ const PDFUtils = {
 window.PDFViewer = PDFViewer;
 window.PDFUtils = PDFUtils;
 
-console.log('📄 PDF Viewer cargado: VERSIÓN MEJORADA con DriveUtils');
+console.log('📄 PDF Viewer cargado: VERSIÓN CORREGIDA con setupDownloadControl()');
