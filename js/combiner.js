@@ -368,58 +368,50 @@ class PDFCombiner {
     }
 
     // === MODO AUTOMÁTICO ===
-    searchSongs() {
-        const textarea = document.getElementById('song-list-textarea');
-        if (!textarea) return;
+searchSongs() {
+    const textarea = document.getElementById('song-list-textarea');
+    if (!textarea) return;
 
-        const songNames = textarea.value.split('\n')
-            .map(line => line.trim())
-            .filter(line => line.length > 0 && !line.startsWith('#'));
+    const songNames = textarea.value.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0 && !line.startsWith('#'));
 
-        if (songNames.length === 0) {
-            this.showError('Por favor, ingresa al menos un nombre de canción');
-            return;
-        }
-
-        console.log('🔍 Buscando canciones:', songNames);
-        this.state.searchResults = [];
-
-        // Combinar archivos de ambas secciones para búsqueda automática
-        const allFiles = [
-            ...this.state.availableFiles.instrumentos.map(f => ({...f, section: 'instrumentos'})),
-            ...this.state.availableFiles.voces.map(f => ({...f, section: 'voces'}))
-        ];
-
-        songNames.forEach((songName, index) => {
-            const matches = this.findSimilarFiles(songName, allFiles);
-            
-            if (matches.length > 0) {
-                const bestMatch = matches[0];
-                const isConfirmed = bestMatch.similarity >= 0.8; // Auto-confirmar si >= 80%
-                
-                this.state.searchResults.push({
-                    searchTerm: songName,
-                    order: index + 1,
-                    matches: matches,
-                    selectedMatch: bestMatch,
-                    confirmed: isConfirmed,
-                    manualSelection: false
-                });
-            } else {
-                this.state.searchResults.push({
-                    searchTerm: songName,
-                    order: index + 1,
-                    matches: [],
-                    selectedMatch: null,
-                    confirmed: false,
-                    manualSelection: false
-                });
-            }
-        });
-
-        this.renderSearchResults();
-        this.updateActionButtons();
+    if (songNames.length === 0) {
+        this.showError('Por favor, ingresa al menos un nombre de canción');
+        return;
     }
+
+    console.log('🔍 Buscando canciones en ambas secciones:', songNames);
+    this.state.searchResults = [];
+
+    songNames.forEach((songName, index) => {
+        // Buscar en instrumentos
+        const instrumentMatches = this.findSimilarFiles(songName, this.state.availableFiles.instrumentos.map(f => ({...f, section: 'instrumentos'})));
+        
+        // Buscar en voces
+        const voicesMatches = this.findSimilarFiles(songName, this.state.availableFiles.voces.map(f => ({...f, section: 'voces'})));
+
+        const result = {
+            searchTerm: songName,
+            order: index + 1,
+            instrumentos: {
+                matches: instrumentMatches,
+                selectedMatch: instrumentMatches.length > 0 ? instrumentMatches[0] : null,
+                confirmed: instrumentMatches.length > 0 && instrumentMatches[0].similarity >= 0.8
+            },
+            voces: {
+                matches: voicesMatches,
+                selectedMatch: voicesMatches.length > 0 ? voicesMatches[0] : null,
+                confirmed: voicesMatches.length > 0 && voicesMatches[0].similarity >= 0.8
+            }
+        };
+
+        this.state.searchResults.push(result);
+    });
+
+    this.renderSearchResults();
+    this.updateActionButtons();
+}
 
     findSimilarFiles(searchTerm, files) {
         const matches = [];
@@ -524,82 +516,115 @@ class PDFCombiner {
         return 'low';
     }
 
-    renderSearchResults() {
-        const container = document.getElementById('search-results');
-        const countElement = document.getElementById('matches-count');
-        
-        if (!container) {
-            console.error('❌ Container search-results no encontrado');
-            return;
-        }
-        
-        const confirmedCount = this.state.searchResults.filter(r => r.confirmed).length;
-        if (countElement) {
-            countElement.textContent = `${confirmedCount}/${this.state.searchResults.length}`;
-        }
-
-        if (this.state.searchResults.length === 0) {
-            container.innerHTML = `
-                <div class="placeholder">
-                    <div class="placeholder-icon">🤖</div>
-                    <p>Escribe los nombres de las canciones arriba</p>
-                    <p style="font-size: 0.9rem; color: var(--text-muted);">El sistema buscará automáticamente</p>
-                </div>
-            `;
-            return;
-        }
-
-        container.innerHTML = this.state.searchResults.map((result, index) => {
-            if (result.matches.length === 0) {
-                return `
-                    <div class="search-result-item">
-                        <div class="similarity-score low">0%</div>
-                        <div class="file-info" style="flex: 1;">
-                            <div class="file-name">"${result.searchTerm}"</div>
-                            <div class="match-status" style="color: var(--accent-red);">
-                                ❌ Sin coincidencias encontradas
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-
-            const bestMatch = result.selectedMatch;
-            const similarityPercent = Math.round(bestMatch.similarity * 100);
-            
-            return `
-                <div class="search-result-item">
-                    <div class="similarity-score ${bestMatch.matchType}">${similarityPercent}%</div>
-                    <div class="file-info" style="flex: 1;">
-                        <div class="file-name">${bestMatch.name}</div>
-                        <div class="match-status ${result.confirmed ? 'confirmed' : 'suggested'}">
-                            ${result.confirmed ? '✅ Confirmado automáticamente' : '⚠️ Requiere confirmación'}
-                            • Buscando: "${result.searchTerm}"
-                            • Sección: ${bestMatch.section}
-                        </div>
-                        ${result.matches.length > 1 ? `
-                            <select class="alternative-select" onchange="CombinerModule.selectAlternativeMatch(${index}, this.value)">
-                                ${result.matches.map((match, matchIndex) => `
-                                    <option value="${matchIndex}" ${matchIndex === 0 ? 'selected' : ''}>
-                                        ${match.name} (${Math.round(match.similarity * 100)}%) - ${match.section}
-                                    </option>
-                                `).join('')}
-                            </select>
-                        ` : ''}
-                    </div>
-                    <div>
-                        <button 
-                            class="btn confirm-btn ${result.confirmed ? 'secondary' : ''}" 
-                            onclick="CombinerModule.toggleConfirmation(${index})">
-                            ${result.confirmed ? '✅' : '❓'}
-                        </button>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        console.log('✅ Resultados renderizados:', this.state.searchResults.length);
+renderSearchResults() {
+    const container = document.getElementById('search-results');
+    const countElement = document.getElementById('matches-count');
+    
+    if (!container) return;
+    
+    // Contar confirmados por sección
+    const confirmedInstrumentos = this.state.searchResults.filter(r => r.instrumentos.confirmed).length;
+    const confirmedVoces = this.state.searchResults.filter(r => r.voces.confirmed).length;
+    
+    if (countElement) {
+        countElement.textContent = `🎸${confirmedInstrumentos} | 🎤${confirmedVoces} de ${this.state.searchResults.length}`;
     }
+
+    if (this.state.searchResults.length === 0) {
+        container.innerHTML = `
+            <div class="placeholder">
+                <div class="placeholder-icon">🤖</div>
+                <p>Escribe los nombres de las canciones arriba</p>
+                <p style="font-size: 0.9rem; color: var(--text-muted);">El sistema buscará automáticamente</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = this.state.searchResults.map((result, index) => {
+        return `
+            <div class="search-result-item dual-section">
+                <div class="search-term-header">
+                    <h4>"${result.searchTerm}" (${result.order})</h4>
+                </div>
+                
+                <!-- Sección Instrumentos -->
+                <div class="section-result">
+                    <div class="section-label">🎸 Instrumentos</div>
+                    ${this.renderSectionResult(result.instrumentos, index, 'instrumentos')}
+                </div>
+                
+                <!-- Sección Voces -->
+                <div class="section-result">
+                    <div class="section-label">🎤 Voces</div>
+                    ${this.renderSectionResult(result.voces, index, 'voces')}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+selectAlternativeMatch(resultIndex, sectionType, matchIndex) {
+    const result = this.state.searchResults[resultIndex];
+    result[sectionType].selectedMatch = result[sectionType].matches[parseInt(matchIndex)];
+    
+    this.renderSearchResults();
+}
+
+toggleSectionConfirmation(resultIndex, sectionType) {
+    const result = this.state.searchResults[resultIndex];
+    result[sectionType].confirmed = !result[sectionType].confirmed;
+    
+    this.renderSearchResults();
+    this.updateActionButtons();
+}
+
+renderSectionResult(sectionData, resultIndex, sectionType) {
+    if (sectionData.matches.length === 0) {
+        return `
+            <div class="no-matches">
+                <div class="similarity-score low">0%</div>
+                <div class="file-info">
+                    <div class="match-status" style="color: var(--accent-red);">
+                        ❌ Sin coincidencias encontradas
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    const bestMatch = sectionData.selectedMatch;
+    const similarityPercent = Math.round(bestMatch.similarity * 100);
+    
+    return `
+        <div class="section-match">
+            <div class="similarity-score ${bestMatch.matchType}">${similarityPercent}%</div>
+            <div class="file-info" style="flex: 1;">
+                <div class="file-name">${bestMatch.name}</div>
+                <div class="match-status ${sectionData.confirmed ? 'confirmed' : 'suggested'}">
+                    ${sectionData.confirmed ? '✅ Confirmado automáticamente' : '⚠️ Requiere confirmación'}
+                    • ${bestMatch.size}
+                </div>
+                ${sectionData.matches.length > 1 ? `
+                    <select class="alternative-select" onchange="CombinerModule.selectAlternativeMatch(${resultIndex}, '${sectionType}', this.value)">
+                        ${sectionData.matches.map((match, matchIndex) => `
+                            <option value="${matchIndex}" ${matchIndex === 0 ? 'selected' : ''}>
+                                ${match.name} (${Math.round(match.similarity * 100)}%)
+                            </option>
+                        `).join('')}
+                    </select>
+                ` : ''}
+            </div>
+            <div>
+                <button 
+                    class="btn confirm-btn ${sectionData.confirmed ? 'secondary' : ''}" 
+                    onclick="CombinerModule.toggleSectionConfirmation(${resultIndex}, '${sectionType}')">
+                    ${sectionData.confirmed ? '✅' : '❓'}
+                </button>
+            </div>
+        </div>
+    `;
+}
 
     selectAlternativeMatch(resultIndex, matchIndex) {
         const result = this.state.searchResults[resultIndex];
@@ -640,23 +665,26 @@ class PDFCombiner {
         }
     }
 
-    updateActionButtons() {
-        const previewBtn = document.getElementById('preview-btn');
-        const combineBtn = document.getElementById('combine-btn');
-        
-        let hasSelection = false;
-        
-        if (this.state.currentMode === 'manual') {
-            hasSelection = this.state.selectedFiles.length > 0;
-        } else {
-            hasSelection = this.state.searchResults.some(r => r.confirmed);
-        }
-        
-        if (previewBtn) previewBtn.disabled = !hasSelection;
-        if (combineBtn) combineBtn.disabled = !hasSelection;
-        
-        this.updateSearchButton();
+updateActionButtons() {
+    const previewBtn = document.getElementById('preview-btn');
+    const combineBtn = document.getElementById('combine-btn');
+    
+    let hasSelection = false;
+    
+    if (this.state.currentMode === 'manual') {
+        hasSelection = this.state.selectedFiles.length > 0;
+    } else {
+        // En modo automático, verificar si hay al menos una confirmación en cualquier sección
+        hasSelection = this.state.searchResults.some(r => 
+            r.instrumentos.confirmed || r.voces.confirmed
+        );
     }
+    
+    if (previewBtn) previewBtn.disabled = !hasSelection;
+    if (combineBtn) combineBtn.disabled = !hasSelection;
+    
+    this.updateSearchButton();
+}
 
     // === NUEVA FUNCIÓN: SEPARAR ARCHIVOS POR SECCIÓN ===
     getFilesToCombineBySections() {
@@ -680,11 +708,30 @@ class PDFCombiner {
         return separated;
     }
 
-    getFilesToCombine() {
-        // Función legacy para compatibilidad
-        const separated = this.getFilesToCombineBySections();
-        return [...separated.instrumentos, ...separated.voces];
+getFilesToCombine() {
+    if (this.state.currentMode === 'manual') {
+        return {
+            instrumentos: this.state.selectedFiles.filter(f => f.section === 'instrumentos'),
+            voces: this.state.selectedFiles.filter(f => f.section === 'voces')
+        };
+    } else {
+        const instrumentos = [];
+        const voces = [];
+        
+        this.state.searchResults
+            .sort((a, b) => a.order - b.order)
+            .forEach(result => {
+                if (result.instrumentos.confirmed && result.instrumentos.selectedMatch) {
+                    instrumentos.push(result.instrumentos.selectedMatch);
+                }
+                if (result.voces.confirmed && result.voces.selectedMatch) {
+                    voces.push(result.voces.selectedMatch);
+                }
+            });
+            
+        return { instrumentos, voces };
     }
+}
 
     // === VISTA PREVIA Y COMBINACIÓN ===
     showPreview() {
@@ -762,69 +809,191 @@ class PDFCombiner {
     }
 
     // === NUEVA FUNCIÓN: COMBINACIÓN SEPARADA POR SECCIONES ===
-    async confirmCombination() {
-        const separatedFiles = this.getFilesToCombineBySections();
-        const totalFiles = separatedFiles.instrumentos.length + separatedFiles.voces.length;
-        
-        if (totalFiles === 0) {
-            this.showError('No hay archivos para combinar');
-            return;
-        }
-
-        this.state.isProcessing = true;
-        this.closePreview();
-        
-        try {
-            // Verificar si RealPDFCombiner está disponible
-            if (!window.RealPDFCombiner) {
-                throw new Error('Combinador real de PDFs no está disponible');
-            }
-
-            // Verificar compatibilidad del navegador
-            if (!window.RealPDFCombiner.isCompatible()) {
-                throw new Error('Tu navegador no es compatible con la combinación de PDFs');
-            }
-
-            const combinedPDFs = {};
-
-            // Combinar instrumentos si hay archivos
-            if (separatedFiles.instrumentos.length > 0) {
-                console.log('🎸 Combinando instrumentos...', separatedFiles.instrumentos.length, 'archivos');
-                
-                this.showRealProcessingModal(separatedFiles.instrumentos, 'instrumentos');
-                
-                combinedPDFs.instrumentos = await window.RealPDFCombiner.combineFiles(
-                    separatedFiles.instrumentos,
-                    (current, total, message) => {
-                        this.updateRealProgress(current, total, `🎸 Instrumentos: ${message}`);
-                    }
-                );
-            }
-
-            // Combinar voces si hay archivos
-            if (separatedFiles.voces.length > 0) {
-                console.log('🎤 Combinando voces...', separatedFiles.voces.length, 'archivos');
-                
-                this.showRealProcessingModal(separatedFiles.voces, 'voces');
-                
-                combinedPDFs.voces = await window.RealPDFCombiner.combineFiles(
-                    separatedFiles.voces,
-                    (current, total, message) => {
-                        this.updateRealProgress(current, total, `🎤 Voces: ${message}`);
-                    }
-                );
-            }
-            
-            // Éxito - mostrar modal de descarga
-            this.showSuccessModalWithMultiplePDFs(separatedFiles, combinedPDFs);
-            
-        } catch (error) {
-            console.error('❌ Error combinando PDFs:', error);
-            this.showRealError(`Error al combinar PDFs: ${error.message}`);
-        } finally {
-            this.state.isProcessing = false;
-        }
+async confirmCombination() {
+    const filesToCombine = this.getFilesToCombine();
+    
+    const totalFiles = filesToCombine.instrumentos.length + filesToCombine.voces.length;
+    
+    if (totalFiles === 0) {
+        this.showError('No hay archivos confirmados para combinar');
+        return;
     }
+
+    this.state.isProcessing = true;
+    this.closePreview();
+    
+    try {
+        if (!window.RealPDFCombiner) {
+            throw new Error('Combinador real de PDFs no está disponible');
+        }
+
+        if (!window.RealPDFCombiner.isCompatible()) {
+            throw new Error('Tu navegador no es compatible con la combinación de PDFs');
+        }
+
+        this.showDualProcessingModal(filesToCombine);
+        
+        const results = [];
+        
+        // Combinar Instrumentos si hay archivos
+        if (filesToCombine.instrumentos.length > 0) {
+            console.log('🎸 Combinando instrumentos...');
+            const instrumentosPDF = await window.RealPDFCombiner.combineFiles(
+                filesToCombine.instrumentos,
+                (current, total, message) => {
+                    this.updateDualProgress('instrumentos', current, total, message);
+                }
+            );
+            results.push({ type: 'instrumentos', blob: instrumentosPDF, count: filesToCombine.instrumentos.length });
+        }
+        
+        // Combinar Voces si hay archivos
+        if (filesToCombine.voces.length > 0) {
+            console.log('🎤 Combinando voces...');
+            const vocesPDF = await window.RealPDFCombiner.combineFiles(
+                filesToCombine.voces,
+                (current, total, message) => {
+                    this.updateDualProgress('voces', current, total, message);
+                }
+            );
+            results.push({ type: 'voces', blob: vocesPDF, count: filesToCombine.voces.length });
+        }
+        
+        this.showDualSuccessModal(results);
+        
+    } catch (error) {
+        console.error('❌ Error combinando PDFs:', error);
+        this.showRealError(`Error al combinar PDFs: ${error.message}`);
+    } finally {
+        this.state.isProcessing = false;
+    }
+}
+
+showDualProcessingModal(files) {
+    const modal = document.createElement('div');
+    modal.className = 'loading-overlay show';
+    modal.id = 'dual-processing-modal';
+    modal.innerHTML = `
+        <div class="loading-spinner">
+            <h3>🔄 Combinando PDFs por Secciones</h3>
+            <div class="dual-progress-container">
+                ${files.instrumentos.length > 0 ? `
+                    <div class="section-progress">
+                        <h4>🎸 Instrumentos (${files.instrumentos.length} archivos)</h4>
+                        <div class="progress-bar-container">
+                            <div id="progress-bar-instrumentos" class="progress-bar">0%</div>
+                        </div>
+                        <p id="message-instrumentos">Preparando...</p>
+                    </div>
+                ` : ''}
+                
+                ${files.voces.length > 0 ? `
+                    <div class="section-progress">
+                        <h4>🎤 Voces (${files.voces.length} archivos)</h4>
+                        <div class="progress-bar-container">
+                            <div id="progress-bar-voces" class="progress-bar">0%</div>
+                        </div>
+                        <p id="message-voces">Preparando...</p>
+                    </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+}
+
+updateDualProgress(section, current, total, message) {
+    const progressBar = document.getElementById(`progress-bar-${section}`);
+    const progressMessage = document.getElementById(`message-${section}`);
+    
+    if (progressBar && progressMessage) {
+        const percentage = Math.round((current / total) * 100);
+        progressBar.style.width = `${percentage}%`;
+        progressBar.textContent = `${percentage}%`;
+        progressMessage.textContent = message;
+    }
+}
+
+showDualSuccessModal(results) {
+    const processingModal = document.getElementById('dual-processing-modal');
+    if (processingModal) {
+        processingModal.remove();
+    }
+    
+    const timestamp = new Date().toLocaleString('es-ES');
+    
+    const modal = document.createElement('div');
+    modal.className = 'loading-overlay show';
+    modal.innerHTML = `
+        <div class="loading-spinner">
+            <h3>✅ PDFs Combinados Exitosamente</h3>
+            <div style="font-size: 3rem; margin: var(--spacing-lg) 0;">📄📄</div>
+            
+            <div style="background: var(--dark-gray); padding: var(--spacing-lg); border-radius: var(--radius-md); margin: var(--spacing-lg) 0;">
+                <h4 style="color: var(--text-primary); margin-bottom: var(--spacing-md);">PDFs Generados:</h4>
+                ${results.map(result => {
+                    const sizeMB = (result.blob.size / 1024 / 1024).toFixed(2);
+                    const icon = result.type === 'instrumentos' ? '🎸' : '🎤';
+                    const sectionName = result.type === 'instrumentos' ? 'Instrumentos' : 'Voces';
+                    return `
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm); padding: var(--spacing-sm); background: var(--medium-gray); border-radius: var(--radius-sm);">
+                            <span>${icon} ${sectionName} - ${result.count} archivos</span>
+                            <span>${sizeMB} MB</span>
+                            <button class="btn small" onclick="CombinerModule.downloadSpecificPDF('${result.type}')">
+                                📥 Descargar
+                            </button>
+                        </div>
+                    `;
+                }).join('')}
+                <div style="margin-top: var(--spacing-md); color: var(--text-muted); font-size: 0.9rem;">
+                    <strong>Fecha:</strong> ${timestamp}
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: var(--spacing-md); justify-content: center; margin-top: var(--spacing-lg);">
+                <button class="btn secondary" onclick="this.closest('.loading-overlay').remove()">
+                    ✨ Cerrar
+                </button>
+                <button class="btn" onclick="CombinerModule.downloadAllPDFs(); this.closest('.loading-overlay').remove();">
+                    📥 Descargar Todos
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    
+    // Guardar referencias de los blobs
+    this.lastCombinedPDFs = {};
+    results.forEach(result => {
+        this.lastCombinedPDFs[result.type] = result.blob;
+    });
+}
+
+downloadSpecificPDF(type) {
+    if (this.lastCombinedPDFs && this.lastCombinedPDFs[type]) {
+        const filename = this.generateSpecificPDFFilename(type);
+        window.RealPDFCombiner.downloadCombinedPDF(this.lastCombinedPDFs[type], filename);
+        this.showSuccess(`PDF de ${type} descargado exitosamente!`);
+    }
+}
+
+downloadAllPDFs() {
+    if (this.lastCombinedPDFs) {
+        Object.entries(this.lastCombinedPDFs).forEach(([type, blob]) => {
+            const filename = this.generateSpecificPDFFilename(type);
+            window.RealPDFCombiner.downloadCombinedPDF(blob, filename);
+        });
+        this.showSuccess('Todos los PDFs descargados exitosamente!');
+    }
+}
+
+generateSpecificPDFFilename(type) {
+    const mode = this.state.currentMode;
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const sectionName = type === 'instrumentos' ? 'Instrumentos' : 'Voces';
+    
+    return `PDFs_${sectionName}_${mode}_${timestamp}.pdf`;
+}
 
     showRealProcessingModal(files, section) {
         // Remover modal anterior si existe
@@ -1092,7 +1261,13 @@ window.CombinerModule = {
     // Funciones generales
     clearAll: () => CombinerModule.clearAll(),
     init: () => CombinerModule.init(),
-    getState: () => CombinerModule.state
+    getState: () => CombinerModule.state,
+
+    // Nuevas funciones para modo automático dual
+    selectAlternativeMatch: (resultIndex, sectionType, matchIndex) => CombinerModule.selectAlternativeMatch(resultIndex, sectionType, matchIndex),
+    toggleSectionConfirmation: (resultIndex, sectionType) => CombinerModule.toggleSectionConfirmation(resultIndex, sectionType),
+    downloadSpecificPDF: (type) => CombinerModule.downloadSpecificPDF(type),
+    downloadAllPDFs: () => CombinerModule.downloadAllPDFs()
 };
 
 console.log('🔗 Combiner Module cargado - VERSIÓN MEJORADA con buscador y separación por secciones');
