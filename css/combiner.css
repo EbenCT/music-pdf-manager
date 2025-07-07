@@ -636,3 +636,28 @@
         padding: 0 var(--spacing-md);
     }
 }
+/* === BUSCADOR MODO MANUAL === */
+.search-container-combiner {
+    padding: 0 var(--spacing-md) var(--spacing-sm);
+}
+
+.search-input-combiner {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--dark-gray);
+    border: 2px solid var(--border-gray);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    transition: all var(--transition-normal);
+}
+
+.search-input-combiner:focus {
+    outline: none;
+    border-color: var(--accent-red);
+    box-shadow: 0 0 0 3px var(--accent-red-light);
+}
+
+.search-input-combiner::placeholder {
+    color: var(--text-muted);
+}

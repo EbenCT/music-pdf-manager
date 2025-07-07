@@ -1,18 +1,20 @@
 /**
- * MUSIC PDF MANAGER - COMBINER MODULE - MEJORADO
- * Módulo para combinar múltiples PDFs en uno solo con switch mejorado
+ * MUSIC PDF MANAGER - COMBINER MODULE - MEJORADO CON BUSCADOR Y SEPARACIÓN
+ * Módulo para combinar múltiples PDFs con búsqueda y separación por secciones
  */
 
 class PDFCombiner {
     constructor() {
         this.state = {
             currentMode: 'manual',
-            currentSection: 'instrumentos', // Nueva propiedad para el modo manual
+            currentSection: 'instrumentos',
             availableFiles: { instrumentos: [], voces: [] },
+            filteredFiles: { instrumentos: [], voces: [] }, // Nueva propiedad para filtros
             selectedFiles: [],
             searchResults: [],
             similarityThreshold: 0.6,
-            isProcessing: false
+            isProcessing: false,
+            manualSearchQuery: '' // Nueva propiedad para búsqueda manual
         };
         
         this.init();
@@ -23,7 +25,7 @@ class PDFCombiner {
         this.loadAvailableFiles();
         this.updateSimilarityDisplay();
         this.updateModeDescription();
-        this.updateSectionDisplay(); // Nueva función
+        this.updateSectionDisplay();
     }
 
     setupEventListeners() {
@@ -41,6 +43,14 @@ class PDFCombiner {
             });
         });
 
+        // Buscador modo manual
+        const manualSearchInput = document.getElementById('manual-search-input');
+        if (manualSearchInput) {
+            manualSearchInput.addEventListener('input', (e) => {
+                this.handleManualSearch(e.target.value);
+            });
+        }
+
         // Slider de similitud
         const slider = document.getElementById('similarity-threshold');
         if (slider) {
@@ -56,6 +66,25 @@ class PDFCombiner {
             textarea.addEventListener('input', DriveUtils.debounce(() => {
                 this.updateSearchButton();
             }, 500));
+        }
+    }
+
+    // === NUEVA FUNCIÓN: BÚSQUEDA MANUAL ===
+    handleManualSearch(query) {
+        this.state.manualSearchQuery = query.toLowerCase().trim();
+        this.filterCurrentSectionFiles();
+        this.renderAvailableFiles();
+    }
+
+    filterCurrentSectionFiles() {
+        const currentFiles = this.state.availableFiles[this.state.currentSection] || [];
+        
+        if (this.state.manualSearchQuery.length < 2) {
+            this.state.filteredFiles[this.state.currentSection] = [...currentFiles];
+        } else {
+            this.state.filteredFiles[this.state.currentSection] = currentFiles.filter(file => 
+                file.name.toLowerCase().includes(this.state.manualSearchQuery)
+            );
         }
     }
 
@@ -112,7 +141,15 @@ class PDFCombiner {
         });
         document.querySelector(`[data-section="${section}"]`).classList.add('active');
 
+        // Limpiar búsqueda al cambiar sección
+        const searchInput = document.getElementById('manual-search-input');
+        if (searchInput) {
+            searchInput.value = '';
+            this.state.manualSearchQuery = '';
+        }
+
         this.updateSectionDisplay();
+        this.filterCurrentSectionFiles();
         this.renderAvailableFiles();
         
         console.log(`📁 Cambiado a sección: ${section}`);
@@ -127,14 +164,25 @@ class PDFCombiner {
         }
         
         if (count) {
-            const files = this.state.availableFiles[this.state.currentSection] || [];
-            count.textContent = `${files.length} archivo${files.length !== 1 ? 's' : ''}`;
+            const filteredCount = this.state.filteredFiles[this.state.currentSection]?.length || 0;
+            const totalCount = this.state.availableFiles[this.state.currentSection]?.length || 0;
+            
+            if (this.state.manualSearchQuery && filteredCount !== totalCount) {
+                count.textContent = `${filteredCount} de ${totalCount}`;
+            } else {
+                count.textContent = `${totalCount} archivo${totalCount !== 1 ? 's' : ''}`;
+            }
         }
     }
 
     loadAvailableFiles() {
         if (window.AppState && window.AppState.files) {
             this.state.availableFiles = window.AppState.files;
+            // Inicializar archivos filtrados
+            this.state.filteredFiles = {
+                instrumentos: [...this.state.availableFiles.instrumentos],
+                voces: [...this.state.availableFiles.voces]
+            };
             console.log('✅ Archivos cargados desde AppState:', {
                 instrumentos: this.state.availableFiles.instrumentos.length,
                 voces: this.state.availableFiles.voces.length
@@ -155,6 +203,10 @@ class PDFCombiner {
                     { id: '11', name: 'Hallelujah - Leonard Cohen.pdf', size: '287 KB', section: 'voces' }
                 ]
             };
+            this.state.filteredFiles = {
+                instrumentos: [...this.state.availableFiles.instrumentos],
+                voces: [...this.state.availableFiles.voces]
+            };
             console.log('⚠️ Usando datos de prueba para desarrollo');
         }
 
@@ -166,16 +218,17 @@ class PDFCombiner {
         const container = document.getElementById('available-files');
         if (!container) return;
 
-        // Obtener archivos de la sección actual
-        const currentFiles = this.state.availableFiles[this.state.currentSection] || [];
+        // Usar archivos filtrados de la sección actual
+        const currentFiles = this.state.filteredFiles[this.state.currentSection] || [];
 
         if (currentFiles.length === 0) {
+            const isFiltering = this.state.manualSearchQuery.length > 0;
             container.innerHTML = `
                 <div class="placeholder">
-                    <div class="placeholder-icon">📄</div>
-                    <p>No hay archivos en ${this.state.currentSection}</p>
+                    <div class="placeholder-icon">${isFiltering ? '🔍' : '📄'}</div>
+                    <p>${isFiltering ? 'Sin resultados para tu búsqueda' : `No hay archivos en ${this.state.currentSection}`}</p>
                     <p style="font-size: 0.9rem; color: var(--text-muted);">
-                        Verifica la conexión con Google Drive
+                        ${isFiltering ? 'Intenta con otros términos' : 'Verifica la conexión con Google Drive'}
                     </p>
                 </div>
             `;
@@ -189,7 +242,7 @@ class PDFCombiner {
                  onclick="CombinerModule.toggleFileSelection('${file.id}')">
                 <input type="checkbox" class="file-checkbox" id="check-${file.id}">
                 <div class="file-info">
-                    <div class="file-name">${file.name}</div>
+                    <div class="file-name">${this.highlightSearchTerms(file.name)}</div>
                     <div class="file-meta">${this.state.currentSection} • ${file.size}</div>
                 </div>
             </div>
@@ -197,6 +250,13 @@ class PDFCombiner {
 
         // Marcar archivos ya seleccionados
         this.updateSelectedStates();
+    }
+
+    highlightSearchTerms(text) {
+        if (!this.state.manualSearchQuery || this.state.manualSearchQuery.length < 2) return text;
+        
+        const regex = new RegExp(`(${this.state.manualSearchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        return text.replace(regex, '<span class="search-result-match">$1</span>');
     }
 
     updateSelectedStates() {
@@ -468,7 +528,10 @@ class PDFCombiner {
         const container = document.getElementById('search-results');
         const countElement = document.getElementById('matches-count');
         
-        if (!container) return;
+        if (!container) {
+            console.error('❌ Container search-results no encontrado');
+            return;
+        }
         
         const confirmedCount = this.state.searchResults.filter(r => r.confirmed).length;
         if (countElement) {
@@ -534,6 +597,8 @@ class PDFCombiner {
                 </div>
             `;
         }).join('');
+
+        console.log('✅ Resultados renderizados:', this.state.searchResults.length);
     }
 
     selectAlternativeMatch(resultIndex, matchIndex) {
@@ -593,42 +658,90 @@ class PDFCombiner {
         this.updateSearchButton();
     }
 
-    getFilesToCombine() {
+    // === NUEVA FUNCIÓN: SEPARAR ARCHIVOS POR SECCIÓN ===
+    getFilesToCombineBySections() {
+        let filesToCombine = [];
+        
         if (this.state.currentMode === 'manual') {
-            return this.state.selectedFiles;
+            filesToCombine = this.state.selectedFiles;
         } else {
-            return this.state.searchResults
+            filesToCombine = this.state.searchResults
                 .filter(result => result.confirmed && result.selectedMatch)
                 .sort((a, b) => a.order - b.order)
                 .map(result => result.selectedMatch);
         }
+
+        // Separar por secciones
+        const separated = {
+            instrumentos: filesToCombine.filter(file => file.section === 'instrumentos'),
+            voces: filesToCombine.filter(file => file.section === 'voces')
+        };
+
+        return separated;
+    }
+
+    getFilesToCombine() {
+        // Función legacy para compatibilidad
+        const separated = this.getFilesToCombineBySections();
+        return [...separated.instrumentos, ...separated.voces];
     }
 
     // === VISTA PREVIA Y COMBINACIÓN ===
     showPreview() {
-        const filesToCombine = this.getFilesToCombine();
+        const separatedFiles = this.getFilesToCombineBySections();
+        const totalFiles = separatedFiles.instrumentos.length + separatedFiles.voces.length;
         
-        if (filesToCombine.length === 0) {
+        if (totalFiles === 0) {
             this.showError('No hay archivos seleccionados para combinar');
             return;
         }
 
         const countElement = document.getElementById('preview-count');
         if (countElement) {
-            countElement.textContent = filesToCombine.length;
+            countElement.textContent = totalFiles;
         }
         
         const previewList = document.getElementById('preview-list');
         if (previewList) {
-            previewList.innerHTML = filesToCombine.map((file, index) => `
-                <div class="preview-file-item">
-                    <div class="file-order">${index + 1}</div>
-                    <div class="file-info" style="flex: 1;">
-                        <div class="file-name">${file.name}</div>
-                        <div class="file-meta">${file.section} • ${file.size}</div>
+            let html = '';
+            
+            // Mostrar instrumentos si hay
+            if (separatedFiles.instrumentos.length > 0) {
+                html += `
+                    <div style="margin-bottom: var(--spacing-lg);">
+                        <h4 style="color: var(--accent-red); margin-bottom: var(--spacing-md);">🎸 Instrumentos (${separatedFiles.instrumentos.length})</h4>
+                        ${separatedFiles.instrumentos.map((file, index) => `
+                            <div class="preview-file-item">
+                                <div class="file-order">${index + 1}</div>
+                                <div class="file-info" style="flex: 1;">
+                                    <div class="file-name">${file.name}</div>
+                                    <div class="file-meta">${file.size}</div>
+                                </div>
+                            </div>
+                        `).join('')}
                     </div>
-                </div>
-            `).join('');
+                `;
+            }
+            
+            // Mostrar voces si hay
+            if (separatedFiles.voces.length > 0) {
+                html += `
+                    <div style="margin-bottom: var(--spacing-lg);">
+                        <h4 style="color: var(--accent-red); margin-bottom: var(--spacing-md);">🎤 Voces (${separatedFiles.voces.length})</h4>
+                        ${separatedFiles.voces.map((file, index) => `
+                            <div class="preview-file-item">
+                                <div class="file-order">${index + 1}</div>
+                                <div class="file-info" style="flex: 1;">
+                                    <div class="file-name">${file.name}</div>
+                                    <div class="file-meta">${file.size}</div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            previewList.innerHTML = html;
         }
 
         const modal = document.getElementById('preview-modal');
@@ -648,10 +761,12 @@ class PDFCombiner {
         this.showPreview();
     }
 
+    // === NUEVA FUNCIÓN: COMBINACIÓN SEPARADA POR SECCIONES ===
     async confirmCombination() {
-        const filesToCombine = this.getFilesToCombine();
+        const separatedFiles = this.getFilesToCombineBySections();
+        const totalFiles = separatedFiles.instrumentos.length + separatedFiles.voces.length;
         
-        if (filesToCombine.length === 0) {
+        if (totalFiles === 0) {
             this.showError('No hay archivos para combinar');
             return;
         }
@@ -670,31 +785,38 @@ class PDFCombiner {
                 throw new Error('Tu navegador no es compatible con la combinación de PDFs');
             }
 
-            // Estimar tamaño y verificar memoria
-            const estimatedSize = window.RealPDFCombiner.estimateCombinedSize(filesToCombine);
-            const memoryCheck = window.RealPDFCombiner.checkMemoryAvailability(estimatedSize);
-            
-            if (!memoryCheck.canProceed) {
-                throw new Error(memoryCheck.warning);
+            const combinedPDFs = {};
+
+            // Combinar instrumentos si hay archivos
+            if (separatedFiles.instrumentos.length > 0) {
+                console.log('🎸 Combinando instrumentos...', separatedFiles.instrumentos.length, 'archivos');
+                
+                this.showRealProcessingModal(separatedFiles.instrumentos, 'instrumentos');
+                
+                combinedPDFs.instrumentos = await window.RealPDFCombiner.combineFiles(
+                    separatedFiles.instrumentos,
+                    (current, total, message) => {
+                        this.updateRealProgress(current, total, `🎸 Instrumentos: ${message}`);
+                    }
+                );
             }
 
-            if (memoryCheck.warning) {
-                console.warn('⚠️', memoryCheck.warning);
+            // Combinar voces si hay archivos
+            if (separatedFiles.voces.length > 0) {
+                console.log('🎤 Combinando voces...', separatedFiles.voces.length, 'archivos');
+                
+                this.showRealProcessingModal(separatedFiles.voces, 'voces');
+                
+                combinedPDFs.voces = await window.RealPDFCombiner.combineFiles(
+                    separatedFiles.voces,
+                    (current, total, message) => {
+                        this.updateRealProgress(current, total, `🎤 Voces: ${message}`);
+                    }
+                );
             }
-
-            // Mostrar progreso real
-            this.showRealProcessingModal(filesToCombine);
-            
-            // ¡COMBINACIÓN REAL!
-            const combinedPDFBlob = await window.RealPDFCombiner.combineFiles(
-                filesToCombine,
-                (current, total, message) => {
-                    this.updateRealProgress(current, total, message);
-                }
-            );
             
             // Éxito - mostrar modal de descarga
-            this.showSuccessModalWithRealPDF(filesToCombine, combinedPDFBlob);
+            this.showSuccessModalWithMultiplePDFs(separatedFiles, combinedPDFs);
             
         } catch (error) {
             console.error('❌ Error combinando PDFs:', error);
@@ -704,13 +826,22 @@ class PDFCombiner {
         }
     }
 
-    showRealProcessingModal(files) {
+    showRealProcessingModal(files, section) {
+        // Remover modal anterior si existe
+        const existingModal = document.getElementById('real-processing-modal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        const sectionIcon = section === 'instrumentos' ? '🎸' : '🎤';
+        const sectionName = section === 'instrumentos' ? 'Instrumentos' : 'Voces';
+        
         const modal = document.createElement('div');
         modal.className = 'loading-overlay show';
         modal.id = 'real-processing-modal';
         modal.innerHTML = `
             <div class="loading-spinner">
-                <h3>🔄 Combinando PDFs Realmente</h3>
+                <h3>🔄 Combinando PDFs de ${sectionName}</h3>
                 <div class="spinner"></div>
                 <div id="real-progress-container" style="margin: var(--spacing-lg) 0; width: 300px;">
                     <div style="background: var(--dark-gray); border-radius: var(--radius-md); padding: 4px;">
@@ -731,9 +862,9 @@ class PDFCombiner {
                 </div>
                 <p id="real-processing-message">Preparando combinación de ${files.length} archivos...</p>
                 <div style="margin-top: var(--spacing-md); color: var(--text-muted); font-size: 0.9rem;">
+                    <div>${sectionIcon} Sección: ${sectionName}</div>
                     <div>📄 Total de archivos: ${files.length}</div>
                     <div>💾 Tamaño estimado: ${this.formatBytes(window.RealPDFCombiner.estimateCombinedSize(files))}</div>
-                    <div>🔄 Modo: ${this.state.currentMode === 'manual' ? 'Manual' : 'Automático'}</div>
                 </div>
             </div>
         `;
@@ -752,83 +883,91 @@ class PDFCombiner {
         }
     }
 
-    showSuccessModalWithRealPDF(files, pdfBlob) {
+    showSuccessModalWithMultiplePDFs(separatedFiles, combinedPDFs) {
         const processingModal = document.getElementById('real-processing-modal');
         if (processingModal) {
             processingModal.remove();
         }
         
-        const fileSizeMB = (pdfBlob.size / 1024 / 1024).toFixed(2);
         const timestamp = new Date().toLocaleString('es-ES');
         const mode = this.state.currentMode === 'manual' ? 'Manual' : 'Automático';
+        
+        const instrumentosSize = combinedPDFs.instrumentos ? (combinedPDFs.instrumentos.size / 1024 / 1024).toFixed(2) : 0;
+        const vocesSize = combinedPDFs.voces ? (combinedPDFs.voces.size / 1024 / 1024).toFixed(2) : 0;
         
         const modal = document.createElement('div');
         modal.className = 'loading-overlay show';
         modal.innerHTML = `
             <div class="loading-spinner">
-                <h3>✅ PDF Combinado Exitosamente</h3>
+                <h3>✅ PDFs Combinados Exitosamente</h3>
                 <div style="font-size: 4rem; margin: var(--spacing-lg) 0;">📄</div>
                 
                 <div style="background: var(--dark-gray); padding: var(--spacing-lg); border-radius: var(--radius-md); margin: var(--spacing-lg) 0;">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); text-align: left;">
                         <div><strong>Modo:</strong> ${mode}</div>
-                        <div><strong>Archivos:</strong> ${files.length}</div>
-                        <div><strong>Tamaño:</strong> ${fileSizeMB} MB</div>
                         <div><strong>Fecha:</strong> ${timestamp}</div>
+                        ${combinedPDFs.instrumentos ? `<div><strong>🎸 Instrumentos:</strong> ${separatedFiles.instrumentos.length} archivos</div>` : ''}
+                        ${combinedPDFs.voces ? `<div><strong>🎤 Voces:</strong> ${separatedFiles.voces.length} archivos</div>` : ''}
                     </div>
                 </div>
                 
                 <div style="margin: var(--spacing-md) 0; padding: var(--spacing-md); background: var(--accent-red-light); border-radius: var(--radius-md);">
                     <p style="color: var(--accent-red); font-weight: 600; margin: 0;">
-                        🎉 ¡Tu PDF combinado está listo para descargar!
+                        🎉 ¡Tus PDFs combinados están listos para descargar!
                     </p>
                 </div>
                 
-                <div style="display: flex; gap: var(--spacing-md); justify-content: center; margin-top: var(--spacing-lg);">
+                <div style="display: flex; flex-direction: column; gap: var(--spacing-md); margin-top: var(--spacing-lg);">
+                    ${combinedPDFs.instrumentos ? `
+                        <button class="btn" onclick="CombinerModule.downloadSpecificPDF('instrumentos'); this.style.opacity='0.5';">
+                            📥 Descargar Instrumentos (${instrumentosSize} MB)
+                        </button>
+                    ` : ''}
+                    ${combinedPDFs.voces ? `
+                        <button class="btn" onclick="CombinerModule.downloadSpecificPDF('voces'); this.style.opacity='0.5';">
+                            📥 Descargar Voces (${vocesSize} MB)
+                        </button>
+                    ` : ''}
                     <button class="btn secondary" onclick="this.closest('.loading-overlay').remove()">
                         ✨ Cerrar
-                    </button>
-                    <button class="btn" onclick="CombinerModule.downloadRealPDF(); this.closest('.loading-overlay').remove();">
-                        📥 Descargar PDF (${fileSizeMB} MB)
                     </button>
                 </div>
             </div>
         `;
         document.body.appendChild(modal);
         
-        // Guardar referencia del blob para descarga
-        this.lastCombinedPDF = pdfBlob;
+        // Guardar referencias de los blobs para descarga
+        this.lastCombinedPDFs = combinedPDFs;
     }
 
-    downloadRealPDF() {
-        if (this.lastCombinedPDF) {
+    downloadSpecificPDF(section) {
+        if (this.lastCombinedPDFs && this.lastCombinedPDFs[section]) {
             try {
-                const filename = this.generatePDFFilename();
-                window.RealPDFCombiner.downloadCombinedPDF(this.lastCombinedPDF, filename);
-                this.showSuccess('¡PDF descargado exitosamente!');
-                
-                // Limpiar referencia
-                this.lastCombinedPDF = null;
+                const filename = this.generateSpecificPDFFilename(section);
+                window.RealPDFCombiner.downloadCombinedPDF(this.lastCombinedPDFs[section], filename);
+                this.showSuccess(`¡PDF de ${section} descargado exitosamente!`);
                 
             } catch (error) {
                 console.error('❌ Error descargando PDF:', error);
                 this.showError('Error al descargar el PDF');
             }
         } else {
-            this.showError('No hay PDF para descargar');
+            this.showError(`No hay PDF de ${section} para descargar`);
         }
     }
 
-    generatePDFFilename() {
+    generateSpecificPDFFilename(section) {
         const mode = this.state.currentMode;
         const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+        const sectionName = section === 'instrumentos' ? 'Instrumentos' : 'Voces';
         
         if (mode === 'manual') {
-            const count = this.state.selectedFiles.length;
-            return `PDFs_Combinados_Manual_${count}archivos_${timestamp}.pdf`;
+            const files = this.state.selectedFiles.filter(f => f.section === section);
+            return `PDFs_${sectionName}_Manual_${files.length}archivos_${timestamp}.pdf`;
         } else {
-            const confirmedCount = this.state.searchResults.filter(r => r.confirmed).length;
-            return `PDFs_Combinados_Auto_${confirmedCount}archivos_${timestamp}.pdf`;
+            const files = this.state.searchResults
+                .filter(r => r.confirmed && r.selectedMatch && r.selectedMatch.section === section);
+            return `PDFs_${sectionName}_Auto_${files.length}archivos_${timestamp}.pdf`;
         }
     }
 
@@ -883,6 +1022,14 @@ class PDFCombiner {
     clearAll() {
         if (this.state.currentMode === 'manual') {
             this.clearAllSelections();
+            // Limpiar buscador manual
+            const searchInput = document.getElementById('manual-search-input');
+            if (searchInput) {
+                searchInput.value = '';
+                this.state.manualSearchQuery = '';
+                this.filterCurrentSectionFiles();
+                this.renderAvailableFiles();
+            }
         } else {
             const textarea = document.getElementById('song-list-textarea');
             if (textarea) {
@@ -897,12 +1044,20 @@ class PDFCombiner {
     // === MENSAJES ===
     showError(message) {
         console.error('❌', message);
-        alert('Error: ' + message);
+        if (window.UIHandlers && window.UIHandlers.showNotification) {
+            window.UIHandlers.showNotification(message, 'error');
+        } else {
+            alert('Error: ' + message);
+        }
     }
 
     showSuccess(message) {
         console.log('✅', message);
-        alert('Éxito: ' + message);
+        if (window.UIHandlers && window.UIHandlers.showNotification) {
+            window.UIHandlers.showNotification(message, 'success');
+        } else {
+            alert('Éxito: ' + message);
+        }
     }
 }
 
@@ -932,7 +1087,7 @@ window.CombinerModule = {
     closePreview: () => CombinerModule.closePreview(),
     combineFiles: () => CombinerModule.combineFiles(),
     confirmCombination: () => CombinerModule.confirmCombination(),
-    downloadRealPDF: () => CombinerModule.downloadRealPDF(),
+    downloadSpecificPDF: (section) => CombinerModule.downloadSpecificPDF(section),
     
     // Funciones generales
     clearAll: () => CombinerModule.clearAll(),
@@ -940,4 +1095,4 @@ window.CombinerModule = {
     getState: () => CombinerModule.state
 };
 
-console.log('🔗 Combiner Module cargado - VERSIÓN MEJORADA con switch de sección');
+console.log('🔗 Combiner Module cargado - VERSIÓN MEJORADA con buscador y separación por secciones');
