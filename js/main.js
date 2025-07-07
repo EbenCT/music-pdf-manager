@@ -7,6 +7,7 @@
 const AppState = {
     currentModule: 'visualizer',
     currentPDF: null,
+    currentSection: 'instrumentos', // Nueva propiedad
     files: { instrumentos: [], voces: [] },
     filteredFiles: { instrumentos: [], voces: [] },
     searchQuery: '',
@@ -82,25 +83,99 @@ class MusicPDFManager {
         this.updateUI('auth-required');
     }
 
-    setupEventListeners() {
-        document.querySelectorAll('.nav-tab').forEach(tab => {
-            tab.addEventListener('click', (e) => {
-                const module = e.target.dataset.module;
-                this.switchModule(module);
-            });
+setupEventListeners() {
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            const module = e.target.dataset.module;
+            this.switchModule(module);
         });
+    });
 
-        const zoomInBtn = document.getElementById('zoom-in');
-        const zoomOutBtn = document.getElementById('zoom-out');
-        const fullscreenBtn = document.getElementById('fullscreen');
+    const zoomInBtn = document.getElementById('zoom-in');
+    const zoomOutBtn = document.getElementById('zoom-out');
+    const fullscreenBtn = document.getElementById('fullscreen');
 
-        if (zoomInBtn) zoomInBtn.addEventListener('click', () => this.zoomIn());
-        if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => this.zoomOut());
-        if (fullscreenBtn) fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+    if (zoomInBtn) zoomInBtn.addEventListener('click', () => this.zoomIn());
+    if (zoomOutBtn) zoomOutBtn.addEventListener('click', () => this.zoomOut());
+    if (fullscreenBtn) fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
 
-        this.setupAuthEventListener();
-        this.startTokenValidationTimer();
+    this.setupAuthEventListener();
+    this.setupSectionSwitch(); // ← NUEVA LÍNEA
+    this.startTokenValidationTimer();
+}
+
+setupSectionSwitch() {
+    // Event listeners para el switch de sección
+    document.querySelectorAll('.switch-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const section = e.target.dataset.section;
+            this.switchSection(section);
+        });
+    });
+}
+
+switchSection(section) {
+    if (AppState.currentSection === section) return;
+    
+    AppState.currentSection = section;
+    
+    // Actualizar botones del switch
+    document.querySelectorAll('.switch-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    document.querySelector(`[data-section="${section}"]`).classList.add('active');
+    
+    // Actualizar título y contador
+    const title = document.getElementById('current-section-title');
+    const count = document.getElementById('current-section-count');
+    
+    if (title) {
+        title.textContent = section === 'instrumentos' ? '🎸 Instrumentos' : '🎤 Voces';
     }
+    
+    // Actualizar lista con animación
+    this.updateUnifiedList();
+    
+    // Actualizar contador
+    this.updateCurrentSectionCount();
+}
+
+updateUnifiedList() {
+    const container = document.getElementById('unified-pdf-list');
+    if (!container) return;
+    
+    // Agregar clase de transición
+    container.classList.add('section-transition');
+    
+    // Obtener archivos de la sección actual
+    const currentFiles = AppState.filteredFiles[AppState.currentSection] || [];
+    
+    this.renderFileList('unified', currentFiles);
+    
+    // Remover clase de transición después de la animación
+    setTimeout(() => {
+        container.classList.remove('section-transition');
+    }, 300);
+}
+
+updateCurrentSectionCount() {
+    const countElement = document.getElementById('current-section-count');
+    if (!countElement) return;
+    
+    const section = AppState.currentSection;
+    
+    if (AppState.loadingProgress[section].status === 'completed') {
+        const total = AppState.files[section].length;
+        const filtered = AppState.filteredFiles[section].length;
+        const text = AppState.searchQuery ? 
+            `${filtered} de ${total} archivos` : 
+            `${total} archivo${total !== 1 ? 's' : ''}`;
+        countElement.textContent = text;
+    } else {
+        countElement.textContent = AppState.loadingProgress[section].status === 'loading' ? 
+            'Cargando...' : 'Conectando...';
+    }
+}
 
     async switchModule(moduleName) {
         AppState.currentModule = moduleName;
@@ -425,49 +500,57 @@ class MusicPDFManager {
         AppState.filteredFiles.voces = [...AppState.files.voces];
     }
 
-    updateFileLists() {
-        this.renderFileList('instrumentos', AppState.filteredFiles.instrumentos);
-        this.renderFileList('voces', AppState.filteredFiles.voces);
+updateFileLists() {
+    // Actualizar la lista unificada en lugar de las listas separadas
+    this.updateUnifiedList();
+}
+
+renderFileList(section, files) {
+    let container;
+    
+    if (section === 'unified') {
+        container = document.getElementById('unified-pdf-list');
+    } else {
+        container = document.getElementById(`${section}-list`);
+    }
+    
+    if (!container) return;
+
+    if (files.length === 0) {
+        const sectionName = section === 'unified' ? AppState.currentSection : section;
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">📄</div>
+                <h3>No hay archivos PDF</h3>
+                <p>No se encontraron archivos en la carpeta de ${sectionName}</p>
+                <button class="btn secondary" onclick="window.app.retryLoadFiles()">
+                    🔄 Recargar archivos
+                </button>
+            </div>
+        `;
+        return;
     }
 
-    renderFileList(section, files) {
-        const container = document.getElementById(`${section}-list`);
-        if (!container) return;
-
-        if (files.length === 0) {
-            container.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">📄</div>
-                    <h3>No hay archivos PDF</h3>
-                    <p>No se encontraron archivos en la carpeta de ${section}</p>
-                    <button class="btn secondary" onclick="window.app.retryLoadFiles()">
-                        🔄 Recargar archivos
-                    </button>
-                </div>
-            `;
-            return;
-        }
-
-        container.innerHTML = files.map(file => `
-            <div class="pdf-item" data-file-id="${file.id}" data-section="${section}">
-                <span class="pdf-item-icon">📄</span>
-                <div class="pdf-item-info">
-                    <div class="pdf-item-name">${this.highlightSearchTerms(file.name)}</div>
-                    <div class="pdf-item-meta">
-                        ${file.size} • ${DriveUtils.formatDate(file.modifiedTime)}
-                    </div>
+    container.innerHTML = files.map(file => `
+        <div class="pdf-item" data-file-id="${file.id}" data-section="${section === 'unified' ? AppState.currentSection : section}">
+            <span class="pdf-item-icon">📄</span>
+            <div class="pdf-item-info">
+                <div class="pdf-item-name">${this.highlightSearchTerms(file.name)}</div>
+                <div class="pdf-item-meta">
+                    ${file.size} • ${DriveUtils.formatDate(file.modifiedTime)}
                 </div>
             </div>
-        `).join('');
+        </div>
+    `).join('');
 
-        container.querySelectorAll('.pdf-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const fileId = item.dataset.fileId;
-                const section = item.dataset.section;
-                this.selectFile(fileId, section);
-            });
+    container.querySelectorAll('.pdf-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const fileId = item.dataset.fileId;
+            const fileSection = item.dataset.section;
+            this.selectFile(fileId, fileSection);
         });
-    }
+    });
+}
 
     highlightSearchTerms(text) {
         if (!AppState.searchQuery || AppState.searchQuery.length < 2) return text;
@@ -549,28 +632,10 @@ class MusicPDFManager {
         AppState.filteredFiles.voces = vocesResults.map(result => result.item);
     }
 
-    updateFileCounts() {
-        const instCount = document.getElementById('instrumentos-count');
-        const vocCount = document.getElementById('voces-count');
-
-        if (instCount && AppState.loadingProgress.instrumentos.status === 'completed') {
-            const total = AppState.files.instrumentos.length;
-            const filtered = AppState.filteredFiles.instrumentos.length;
-            const text = AppState.searchQuery ? 
-                `${filtered} de ${total} archivos` : 
-                `${total} archivo${total !== 1 ? 's' : ''}`;
-            instCount.textContent = text;
-        }
-
-        if (vocCount && AppState.loadingProgress.voces.status === 'completed') {
-            const total = AppState.files.voces.length;
-            const filtered = AppState.filteredFiles.voces.length;
-            const text = AppState.searchQuery ? 
-                `${filtered} de ${total} archivos` : 
-                `${total} archivo${total !== 1 ? 's' : ''}`;
-            vocCount.textContent = text;
-        }
-    }
+updateFileCounts() {
+    // Solo actualizar el contador de la sección actual
+    this.updateCurrentSectionCount();
+}
 
     async retryLoadFiles() {
         if (!AppState.isAuthenticated) {

@@ -144,88 +144,87 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Módulo 1: Visualizador -->
-            <div id="visualizer-module" class="module active">
-                <div class="module-header">
-                    <h2>📄 Módulo de Visualización</h2>
-                    <div class="search-container">
-                        <input type="text" id="search-input" placeholder="🔍 Buscar archivos..." class="search-input">
-                        <div class="search-results" id="search-results"></div>
-                    </div>
+<!-- Módulo 1: Visualizador -->
+<div id="visualizer-module" class="module active">
+    <div class="module-header">
+        <h2>📄 Módulo de Visualización</h2>
+        <div class="search-container">
+            <input type="text" id="search-input" placeholder="🔍 Buscar archivos..." class="search-input">
+            <div class="search-results" id="search-results"></div>
+        </div>
+    </div>
+
+    <!-- Panel de Estado de Conexión -->
+    <div id="connection-status" class="connection-status hidden">
+        <div class="status-content">
+            <div class="status-icon">☁️</div>
+            <div class="status-info">
+                <h3 id="status-title">Conectando con Google Drive...</h3>
+                <p id="status-message">Preparando autenticación</p>
+            </div>
+            <div class="status-actions">
+                <button id="auth-button" class="btn" style="display: none;">
+                    🔐 Iniciar Sesión con Google
+                </button>
+                <button id="retry-button" class="btn secondary" style="display: none;" onclick="window.app && window.app.retryConnection ? window.app.retryConnection() : location.reload()">
+                    🔄 Intentar de Nuevo
+                </button>
+                <button id="logout-button" class="btn secondary" style="display: none;" onclick="window.app && window.app.signOut ? window.app.signOut() : console.log('Logout no disponible')">
+                    👋 Cerrar Sesión
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="content-grid">
+        <!-- Panel Izquierdo: Lista Unificada con Switch -->
+        <div class="pdf-lists">
+            <!-- Switch de Sección -->
+            <div class="section-switch">
+                <button class="switch-btn active" data-section="instrumentos">
+                    🎸 Instrumentos
+                </button>
+                <button class="switch-btn" data-section="voces">
+                    🎤 Voces
+                </button>
+            </div>
+
+            <!-- Lista Unificada -->
+            <div class="pdf-section">
+                <div class="section-header">
+                    <h3 id="current-section-title">🎸 Instrumentos</h3>
+                    <span class="count" id="current-section-count">Conectando...</span>
                 </div>
-
-                <!-- Panel de Estado de Conexión -->
-                <div id="connection-status" class="connection-status hidden">
-                    <div class="status-content">
-                        <div class="status-icon">☁️</div>
-                        <div class="status-info">
-                            <h3 id="status-title">Conectando con Google Drive...</h3>
-                            <p id="status-message">Preparando autenticación</p>
-                        </div>
-                        <div class="status-actions">
-                            <button id="auth-button" class="btn" style="display: none;">
-                                🔐 Iniciar Sesión con Google
-                            </button>
-                            <button id="retry-button" class="btn secondary" style="display: none;" onclick="window.app && window.app.retryConnection ? window.app.retryConnection() : location.reload()">
-                                🔄 Intentar de Nuevo
-                            </button>
-                            <button id="logout-button" class="btn secondary" style="display: none;" onclick="window.app && window.app.signOut ? window.app.signOut() : console.log('Logout no disponible')">
-                                👋 Cerrar Sesión
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="content-grid">
-                    <!-- Panel Izquierdo: Listas de PDFs -->
-                    <div class="pdf-lists">
-                        <!-- Sección Instrumentos -->
-                        <div class="pdf-section">
-                            <div class="section-header">
-                                <h3>🎸 Instrumentos</h3>
-                                <span class="count" id="instrumentos-count">Conectando...</span>
-                            </div>
-                            <div class="pdf-list" id="instrumentos-list">
-                                <div class="loading">Conectando con Google Drive...</div>
-                            </div>
-                        </div>
-
-                        <!-- Sección Voces -->
-                        <div class="pdf-section">
-                            <div class="section-header">
-                                <h3>🎤 Voces</h3>
-                                <span class="count" id="voces-count">Conectando...</span>
-                            </div>
-                            <div class="pdf-list" id="voces-list">
-                                <div class="loading">Conectando con Google Drive...</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Panel Derecho: Visualizador de PDF -->
-                    <div class="pdf-viewer-container">
-                        <div class="viewer-header">
-                            <h3 id="current-pdf-title">Conectando con Google Drive...</h3>
-                            <div class="viewer-controls">
-                                <button id="zoom-out" class="control-btn">🔍-</button>
-                                <span id="zoom-level">100%</span>
-                                <button id="zoom-in" class="control-btn">🔍+</button>
-                                <button id="fullscreen" class="control-btn">⛶</button>
-                                <button id="download-pdf" class="control-btn" title="Descargar PDF">📥</button>
-                            </div>
-                        </div>
-                        <div class="pdf-viewer" id="pdf-viewer">
-                            <div class="placeholder">
-                                <div class="placeholder-icon">☁️</div>
-                                <p>Conectando con Google Drive...</p>
-                                <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: var(--spacing-md);">
-                                    Se solicitará autorización para acceder a tus carpetas
-                                </p>
-                            </div>
-                        </div>
-                    </div>
+                <div class="pdf-list" id="unified-pdf-list">
+                    <div class="loading">Conectando con Google Drive...</div>
                 </div>
             </div>
+        </div>
+
+        <!-- Panel Derecho: Visualizador de PDF (sin cambios) -->
+        <div class="pdf-viewer-container">
+            <div class="viewer-header">
+                <h3 id="current-pdf-title">Conectando con Google Drive...</h3>
+                <div class="viewer-controls">
+                    <button id="zoom-out" class="control-btn">🔍-</button>
+                    <span id="zoom-level">100%</span>
+                    <button id="zoom-in" class="control-btn">🔍+</button>
+                    <button id="fullscreen" class="control-btn">⛶</button>
+                    <button id="download-pdf" class="control-btn" title="Descargar PDF">📥</button>
+                </div>
+            </div>
+            <div class="pdf-viewer" id="pdf-viewer">
+                <div class="placeholder">
+                    <div class="placeholder-icon">☁️</div>
+                    <p>Conectando con Google Drive...</p>
+                    <p style="font-size: 0.9rem; color: var(--text-muted); margin-top: var(--spacing-md);">
+                        Se solicitará autorización para acceder a tus carpetas
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
             <!-- Módulo 2: Combinador (Se carga dinámicamente) -->
             <div id="combiner-module" class="module">
