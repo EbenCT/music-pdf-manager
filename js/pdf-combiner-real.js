@@ -11,23 +11,34 @@ class RealPDFCombiner {
 
     async loadPDFLib() {
         try {
-            // Cargar PDF-lib desde CDN si no está disponible
-            if (typeof PDFLib === 'undefined') {
-                console.log('📦 Cargando PDF-lib...');
-                
-                const script = document.createElement('script');
-                script.src = 'https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js';
-                script.async = true;
-                
-                return new Promise((resolve, reject) => {
-                    script.onload = () => {
+            // Verificar si PDF-lib ya está cargado
+            if (typeof PDFLib !== 'undefined') {
+                console.log('✅ PDF-lib ya está disponible');
+                return;
+            }
+
+            // Si no está cargado, intentar cargarlo dinámicamente
+            console.log('📦 Cargando PDF-lib dinámicamente...');
+            
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
+            script.async = true;
+            
+            return new Promise((resolve, reject) => {
+                script.onload = () => {
+                    if (typeof PDFLib !== 'undefined') {
                         console.log('✅ PDF-lib cargado exitosamente');
                         resolve();
-                    };
-                    script.onerror = () => reject(new Error('Error cargando PDF-lib'));
-                    document.head.appendChild(script);
-                });
-            }
+                    } else {
+                        reject(new Error('PDF-lib no se inicializó correctamente'));
+                    }
+                };
+                script.onerror = () => {
+                    console.error('❌ Error cargando PDF-lib desde CDN');
+                    reject(new Error('Error cargando PDF-lib. Verifica tu conexión a internet.'));
+                };
+                document.head.appendChild(script);
+            });
         } catch (error) {
             console.error('❌ Error cargando PDF-lib:', error);
             throw error;
@@ -48,13 +59,15 @@ class RealPDFCombiner {
         this.isProcessing = true;
 
         try {
-            if (!files || files.length === 0) {
-                throw new Error('No hay archivos para combinar');
-            }
-
             // Verificar que PDF-lib esté disponible
             if (typeof PDFLib === 'undefined') {
+                console.log('⚠️ PDF-lib no disponible, intentando cargar...');
                 await this.loadPDFLib();
+                
+                // Verificar nuevamente después de la carga
+                if (typeof PDFLib === 'undefined') {
+                    throw new Error('PDF-lib no pudo ser cargado. Verifica tu conexión a internet y la configuración CSP.');
+                }
             }
 
             const { PDFDocument } = PDFLib;
