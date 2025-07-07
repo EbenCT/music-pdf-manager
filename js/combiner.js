@@ -494,7 +494,7 @@ class PDFCombiner {
         return 'low';
     }
 
-// REEMPLAZAR la función renderSearchResults() existente con esta versión corregida
+// FUNCIÓN CORREGIDA - Reemplazar en js/combiner.js
 renderSearchResults() {
     console.log('🔍 Renderizando resultados de búsqueda:', this.state.searchResults.length);
     
@@ -506,6 +506,7 @@ renderSearchResults() {
         return;
     }
     
+    // Actualizar contador
     const confirmedInstrumentos = this.state.searchResults.filter(r => r.instrumentos.confirmed).length;
     const confirmedVoces = this.state.searchResults.filter(r => r.voces.confirmed).length;
     
@@ -513,6 +514,7 @@ renderSearchResults() {
         countElement.textContent = `🎸${confirmedInstrumentos} | 🎤${confirmedVoces} de ${this.state.searchResults.length}`;
     }
 
+    // Si no hay resultados, mostrar placeholder
     if (this.state.searchResults.length === 0) {
         container.innerHTML = `
             <div class="placeholder">
@@ -524,45 +526,148 @@ renderSearchResults() {
         return;
     }
 
-    console.log('📊 Generando HTML para', this.state.searchResults.length, 'resultados');
-
-    // Generar HTML de forma más segura
-    const htmlParts = [];
-    
-    this.state.searchResults.forEach((result, index) => {
-        const resultHtml = `
-            <div class="search-result-item" style="margin-bottom: var(--spacing-lg); background: var(--dark-gray); border-radius: var(--radius-md); padding: var(--spacing-md);">
-                <div style="background: var(--medium-gray); padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-sm); text-align: center; margin-bottom: var(--spacing-md); border-bottom: 2px solid var(--accent-red);">
-                    <h4 style="color: var(--text-primary); margin: 0; font-size: 1rem; font-weight: 600;">"${result.searchTerm}" (${result.order})</h4>
-                </div>
-                
-                <div style="background: var(--secondary-black); border-radius: var(--radius-md); padding: var(--spacing-md); border: 1px solid var(--border-gray); margin-bottom: var(--spacing-sm);">
-                    <div style="color: var(--accent-red); font-weight: 600; margin-bottom: var(--spacing-sm); font-size: 0.9rem;">🎸 Instrumentos</div>
-                    ${this.renderSectionResultSafe(result.instrumentos, index, 'instrumentos')}
-                </div>
-                
-                <div style="background: var(--secondary-black); border-radius: var(--radius-md); padding: var(--spacing-md); border: 1px solid var(--border-gray);">
-                    <div style="color: var(--accent-red); font-weight: 600; margin-bottom: var(--spacing-sm); font-size: 0.9rem;">🎤 Voces</div>
-                    ${this.renderSectionResultSafe(result.voces, index, 'voces')}
-                </div>
-            </div>
-        `;
-        htmlParts.push(resultHtml);
-    });
-
     try {
-        container.innerHTML = htmlParts.join('');
-        console.log('✅ HTML generado y asignado correctamente');
+        // Crear HTML de forma más segura
+        const resultsHTML = this.state.searchResults.map((result, index) => {
+            return this.createResultItemHTML(result, index);
+        }).join('');
+
+        container.innerHTML = resultsHTML;
+        
+        // Agregar event listeners después de insertar el HTML
+        this.attachSearchResultListeners();
+        
+        console.log('✅ Resultados renderizados exitosamente');
+        
     } catch (error) {
-        console.error('❌ Error asignando HTML:', error);
+        console.error('❌ Error renderizando resultados:', error);
         container.innerHTML = `
             <div class="placeholder">
                 <div class="placeholder-icon">⚠️</div>
                 <p>Error mostrando resultados</p>
-                <p style="font-size: 0.9rem; color: var(--accent-red);">${error.message}</p>
+                <p style="font-size: 0.9rem; color: var(--accent-red);">Revisa la consola para más detalles</p>
+                <button class="btn secondary" onclick="CombinerModule.debugSearchResults()">
+                    🔧 Debug
+                </button>
             </div>
         `;
     }
+}
+
+// NUEVA FUNCIÓN AUXILIAR - Agregar en js/combiner.js
+createResultItemHTML(result, index) {
+    return `
+        <div class="search-result-item" style="margin-bottom: var(--spacing-lg); background: var(--dark-gray); border-radius: var(--radius-md); padding: var(--spacing-md);">
+            <!-- Encabezado del término de búsqueda -->
+            <div style="background: var(--medium-gray); padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-sm); text-align: center; margin-bottom: var(--spacing-md); border-bottom: 2px solid var(--accent-red);">
+                <h4 style="color: var(--text-primary); margin: 0; font-size: 1rem; font-weight: 600;">
+                    "${result.searchTerm}" (${result.order})
+                </h4>
+            </div>
+            
+            <!-- Sección Instrumentos -->
+            <div style="background: var(--secondary-black); border-radius: var(--radius-md); padding: var(--spacing-md); border: 1px solid var(--border-gray); margin-bottom: var(--spacing-sm);">
+                <div style="color: var(--accent-red); font-weight: 600; margin-bottom: var(--spacing-sm); font-size: 0.9rem;">
+                    🎸 Instrumentos
+                </div>
+                ${this.createSectionHTML(result.instrumentos, index, 'instrumentos')}
+            </div>
+            
+            <!-- Sección Voces -->
+            <div style="background: var(--secondary-black); border-radius: var(--radius-md); padding: var(--spacing-md); border: 1px solid var(--border-gray);">
+                <div style="color: var(--accent-red); font-weight: 600; margin-bottom: var(--spacing-sm); font-size: 0.9rem;">
+                    🎤 Voces
+                </div>
+                ${this.createSectionHTML(result.voces, index, 'voces')}
+            </div>
+        </div>
+    `;
+}
+
+// NUEVA FUNCIÓN AUXILIAR - Agregar en js/combiner.js
+createSectionHTML(sectionData, resultIndex, sectionType) {
+    if (sectionData.matches.length === 0) {
+        return `
+            <div style="display: flex; align-items: center; gap: var(--spacing-sm); opacity: 0.7;">
+                <div class="similarity-score low">0%</div>
+                <div style="flex: 1;">
+                    <div style="color: var(--accent-red);">❌ Sin coincidencias encontradas</div>
+                </div>
+            </div>
+        `;
+    }
+
+    const bestMatch = sectionData.selectedMatch;
+    const similarityPercent = Math.round(bestMatch.similarity * 100);
+    
+    // Crear select de alternativas si hay múltiples matches
+    let selectHTML = '';
+    if (sectionData.matches.length > 1) {
+        const selectId = `select-${resultIndex}-${sectionType}`;
+        selectHTML = `
+            <select id="${selectId}" class="alternative-select" style="background: var(--dark-gray); color: var(--text-primary); border: 1px solid var(--border-gray); padding: var(--spacing-xs); border-radius: var(--radius-sm); margin-top: var(--spacing-xs); width: 100%; font-size: 0.8rem;">
+                ${sectionData.matches.map((match, matchIndex) => `
+                    <option value="${matchIndex}" ${matchIndex === 0 ? 'selected' : ''}>
+                        ${this.escapeHtml(match.name)} (${Math.round(match.similarity * 100)}%)
+                    </option>
+                `).join('')}
+            </select>
+        `;
+    }
+    
+    const confirmBtnId = `confirm-${resultIndex}-${sectionType}`;
+    
+    return `
+        <div style="display: flex; align-items: flex-start; gap: var(--spacing-sm);">
+            <div class="similarity-score ${bestMatch.matchType}">${similarityPercent}%</div>
+            <div style="flex: 1;">
+                <div class="file-name" style="color: var(--text-primary); font-weight: 500; margin-bottom: var(--spacing-xs);">
+                    ${this.escapeHtml(bestMatch.name)}
+                </div>
+                <div class="match-status ${sectionData.confirmed ? 'confirmed' : 'suggested'}" style="font-size: 0.8rem; margin-top: var(--spacing-xs);">
+                    ${sectionData.confirmed ? '✅ Confirmado automáticamente' : '⚠️ Requiere confirmación'}
+                    • ${bestMatch.size}
+                </div>
+                ${selectHTML}
+            </div>
+            <div>
+                <button 
+                    id="${confirmBtnId}"
+                    class="btn confirm-btn ${sectionData.confirmed ? 'secondary' : ''}" 
+                    style="padding: var(--spacing-xs) var(--spacing-sm); font-size: 0.8rem; min-width: 60px;">
+                    ${sectionData.confirmed ? '✅' : '❓'}
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// NUEVA FUNCIÓN AUXILIAR - Agregar en js/combiner.js
+escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// NUEVA FUNCIÓN - Agregar en js/combiner.js
+attachSearchResultListeners() {
+    // Agregar listeners para los selects de alternativas
+    document.querySelectorAll('.alternative-select').forEach(select => {
+        select.addEventListener('change', (e) => {
+            const selectId = e.target.id;
+            const [, resultIndex, sectionType] = selectId.split('-');
+            this.selectAlternativeMatch(parseInt(resultIndex), sectionType, e.target.value);
+        });
+    });
+    
+    // Agregar listeners para los botones de confirmación
+    document.querySelectorAll('.confirm-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const btnId = e.target.id;
+            const [, resultIndex, sectionType] = btnId.split('-');
+            this.toggleSectionConfirmation(parseInt(resultIndex), sectionType);
+        });
+    });
 }
 
 // AGREGAR estas nuevas funciones auxiliares
