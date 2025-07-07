@@ -198,6 +198,8 @@
     max-height: 400px;
     overflow-y: auto;
     padding: var(--spacing-sm);
+    display: block !important; /* ← AGREGAR ESTA LÍNEA */
+    visibility: visible !important; /* ← AGREGAR ESTA LÍNEA */
 }
 
 .combiner-file-item {
