@@ -494,11 +494,17 @@ class PDFCombiner {
         return 'low';
     }
 
+// REEMPLAZAR la función renderSearchResults() existente con esta versión corregida
 renderSearchResults() {
+    console.log('🔍 Renderizando resultados de búsqueda:', this.state.searchResults.length);
+    
     const container = document.getElementById('search-results');
     const countElement = document.getElementById('matches-count');
     
-    if (!container) return;
+    if (!container) {
+        console.error('❌ Elemento search-results no encontrado');
+        return;
+    }
     
     const confirmedInstrumentos = this.state.searchResults.filter(r => r.instrumentos.confirmed).length;
     const confirmedVoces = this.state.searchResults.filter(r => r.voces.confirmed).length;
@@ -518,28 +524,126 @@ renderSearchResults() {
         return;
     }
 
-    // CORREGIDO: Renderizar cada resultado individualmente
-    container.innerHTML = this.state.searchResults.map((result, index) => {
-        return `
+    console.log('📊 Generando HTML para', this.state.searchResults.length, 'resultados');
+
+    // Generar HTML de forma más segura
+    const htmlParts = [];
+    
+    this.state.searchResults.forEach((result, index) => {
+        const resultHtml = `
             <div class="search-result-item" style="margin-bottom: var(--spacing-lg); background: var(--dark-gray); border-radius: var(--radius-md); padding: var(--spacing-md);">
                 <div style="background: var(--medium-gray); padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-sm); text-align: center; margin-bottom: var(--spacing-md); border-bottom: 2px solid var(--accent-red);">
                     <h4 style="color: var(--text-primary); margin: 0; font-size: 1rem; font-weight: 600;">"${result.searchTerm}" (${result.order})</h4>
                 </div>
                 
-                <!-- Sección Instrumentos -->
                 <div style="background: var(--secondary-black); border-radius: var(--radius-md); padding: var(--spacing-md); border: 1px solid var(--border-gray); margin-bottom: var(--spacing-sm);">
                     <div style="color: var(--accent-red); font-weight: 600; margin-bottom: var(--spacing-sm); font-size: 0.9rem;">🎸 Instrumentos</div>
-                    ${this.renderSectionResult(result.instrumentos, index, 'instrumentos')}
+                    ${this.renderSectionResultSafe(result.instrumentos, index, 'instrumentos')}
                 </div>
                 
-                <!-- Sección Voces -->
                 <div style="background: var(--secondary-black); border-radius: var(--radius-md); padding: var(--spacing-md); border: 1px solid var(--border-gray);">
                     <div style="color: var(--accent-red); font-weight: 600; margin-bottom: var(--spacing-sm); font-size: 0.9rem;">🎤 Voces</div>
-                    ${this.renderSectionResult(result.voces, index, 'voces')}
+                    ${this.renderSectionResultSafe(result.voces, index, 'voces')}
                 </div>
             </div>
         `;
-    }).join('');
+        htmlParts.push(resultHtml);
+    });
+
+    try {
+        container.innerHTML = htmlParts.join('');
+        console.log('✅ HTML generado y asignado correctamente');
+    } catch (error) {
+        console.error('❌ Error asignando HTML:', error);
+        container.innerHTML = `
+            <div class="placeholder">
+                <div class="placeholder-icon">⚠️</div>
+                <p>Error mostrando resultados</p>
+                <p style="font-size: 0.9rem; color: var(--accent-red);">${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+// AGREGAR estas nuevas funciones auxiliares
+renderSectionResultSafe(sectionData, resultIndex, sectionType) {
+    if (sectionData.matches.length === 0) {
+        return `
+            <div style="display: flex; align-items: center; gap: var(--spacing-sm); opacity: 0.7;">
+                <div class="similarity-score low">0%</div>
+                <div style="flex: 1;">
+                    <div style="color: var(--accent-red);">❌ Sin coincidencias encontradas</div>
+                </div>
+            </div>
+        `;
+    }
+
+    const bestMatch = sectionData.selectedMatch;
+    const similarityPercent = Math.round(bestMatch.similarity * 100);
+    
+    let selectHtml = '';
+    if (sectionData.matches.length > 1) {
+        const options = sectionData.matches.map((match, matchIndex) => 
+            `<option value="${matchIndex}" ${matchIndex === 0 ? 'selected' : ''}>${match.name} (${Math.round(match.similarity * 100)}%)</option>`
+        ).join('');
+        
+        selectHtml = `
+            <select class="alternative-select" 
+                    onchange="CombinerModule.selectAlternativeMatch(${resultIndex}, '${sectionType}', this.value)" 
+                    style="background: var(--dark-gray); color: var(--text-primary); border: 1px solid var(--border-gray); padding: var(--spacing-xs); border-radius: var(--radius-sm); margin-top: var(--spacing-xs); width: 100%; font-size: 0.8rem;">
+                ${options}
+            </select>
+        `;
+    }
+    
+    return `
+        <div style="display: flex; align-items: flex-start; gap: var(--spacing-sm);">
+            <div class="similarity-score ${bestMatch.matchType}">${similarityPercent}%</div>
+            <div style="flex: 1;">
+                <div class="file-name" style="color: var(--text-primary); font-weight: 500; margin-bottom: var(--spacing-xs);">
+                    ${bestMatch.name}
+                </div>
+                <div class="match-status ${sectionData.confirmed ? 'confirmed' : 'suggested'}" style="font-size: 0.8rem; margin-top: var(--spacing-xs);">
+                    ${sectionData.confirmed ? '✅ Confirmado automáticamente' : '⚠️ Requiere confirmación'}
+                    • ${bestMatch.size}
+                </div>
+                ${selectHtml}
+            </div>
+            <div>
+                <button 
+                    class="btn confirm-btn ${sectionData.confirmed ? 'secondary' : ''}" 
+                    onclick="CombinerModule.toggleSectionConfirmation(${resultIndex}, '${sectionType}')"
+                    style="padding: var(--spacing-xs) var(--spacing-sm); font-size: 0.8rem; min-width: 60px;">
+                    ${sectionData.confirmed ? '✅' : '❓'}
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+// AGREGAR función de debugging
+debugSearchResults() {
+    console.group('🔍 DEBUG SEARCH RESULTS');
+    console.log('Número de resultados:', this.state.searchResults.length);
+    console.log('Elemento container:', document.getElementById('search-results'));
+    console.log('Elemento contador:', document.getElementById('matches-count'));
+    
+    this.state.searchResults.forEach((result, index) => {
+        console.log(`Resultado ${index + 1}:`, {
+            searchTerm: result.searchTerm,
+            instrumentos: {
+                matches: result.instrumentos.matches.length,
+                confirmed: result.instrumentos.confirmed,
+                selectedMatch: result.instrumentos.selectedMatch?.name
+            },
+            voces: {
+                matches: result.voces.matches.length,
+                confirmed: result.voces.confirmed,
+                selectedMatch: result.voces.selectedMatch?.name
+            }
+        });
+    });
+    console.groupEnd();
 }
 
 renderSectionResult(sectionData, resultIndex, sectionType) {
@@ -1021,7 +1125,9 @@ window.CombinerModule = {
     downloadAllPDFs: () => CombinerModule.downloadAllPDFs(),
     clearAll: () => CombinerModule.clearAll(),
     init: () => CombinerModule.init(),
+    debugSearchResults: () => CombinerModule.debugSearchResults(),
     getState: () => CombinerModule.state
+    
 };
 
 console.log('🔗 Combiner Module cargado - VERSIÓN CORREGIDA');
