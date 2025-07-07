@@ -397,68 +397,90 @@ class PDFCombiner {
         this.updateActionButtons();
     }
 
-    findSimilarFiles(searchTerm, files) {
-        const matches = [];
+findSimilarFiles(searchTerm, files) {
+    const matches = [];
 
-        files.forEach(file => {
-            const similarity = this.calculateSimilarity(searchTerm, file.name);
-            
-            if (similarity >= this.state.similarityThreshold) {
-                matches.push({
-                    ...file,
-                    similarity: similarity,
-                    matchType: this.getSimilarityLevel(similarity)
-                });
-            }
-        });
+    files.forEach(file => {
+        const similarity = this.calculateSimilarity(searchTerm, file.name);
+        
+        if (similarity >= 0.25) { // Umbral mínimo como en Python
+            matches.push({
+                ...file,
+                similarity: similarity,
+                matchType: this.getSimilarityLevel(similarity)
+            });
+        }
+    });
 
-        return matches.sort((a, b) => b.similarity - a.similarity);
+    // Ordenar por similitud y retornar solo la mejor coincidencia
+    const sortedMatches = matches.sort((a, b) => b.similarity - a.similarity);
+    return sortedMatches.length > 0 ? [sortedMatches[0]] : []; // Solo la mejor
+}
+
+calculateSimilarity(texto1, texto2) {
+    const texto1_norm = this.normalizeTextAdvanced(texto1);
+    const texto2_norm = this.normalizeTextAdvanced(texto2);
+    
+    // Similitud exacta usando SequenceMatcher simplificado
+    const similitudExacta = this.sequenceMatcherSimple(texto1_norm, texto2_norm);
+    
+    // Similitud por palabras clave
+    const palabras1 = new Set(texto1_norm.split(' ').filter(w => w.length > 0));
+    const palabras2 = new Set(texto2_norm.split(' ').filter(w => w.length > 0));
+    
+    let similitudPalabras = 0;
+    if (palabras1.size > 0 || palabras2.size > 0) {
+        const interseccion = new Set([...palabras1].filter(x => palabras2.has(x)));
+        const union = new Set([...palabras1, ...palabras2]);
+        similitudPalabras = union.size > 0 ? interseccion.size / union.size : 0;
     }
+    
+    // Bonus por palabras importantes (como en Python)
+    const palabrasImportantes = new Set(['dios', 'señor', 'jesus', 'cristo', 'alabar', 'adorar', 'santo', 'gloria']);
+    let bonus = 0;
+    
+    palabrasImportantes.forEach(palabra => {
+        if (texto1_norm.includes(palabra) && texto2_norm.includes(palabra)) {
+            bonus += 0.1;
+        }
+    });
+    
+    // Retornar la mayor similitud + bonus (como en Python)
+    return Math.min(1.0, Math.max(similitudExacta, similitudPalabras) + bonus);
+}
 
-    calculateSimilarity(text1, text2) {
-        const normalized1 = this.normalizeText(text1);
-        const normalized2 = this.normalizeText(text2);
-        
-        const exactSimilarity = this.sequenceMatcher(normalized1, normalized2);
-        
-        const words1 = new Set(normalized1.split(' ').filter(w => w.length > 0));
-        const words2 = new Set(normalized2.split(' ').filter(w => w.length > 0));
-        
-        const intersection = new Set([...words1].filter(x => words2.has(x)));
-        const union = new Set([...words1, ...words2]);
-        
-        const wordSimilarity = union.size > 0 ? intersection.size / union.size : 0;
-        
-        const importantWords = ['dios', 'señor', 'jesus', 'cristo', 'alabar', 'adorar', 'santo', 'gloria'];
-        let bonus = 0;
-        
-        importantWords.forEach(word => {
-            if (normalized1.includes(word) && normalized2.includes(word)) {
-                bonus += 0.1;
-            }
-        });
-        
-        return Math.min(1.0, Math.max(exactSimilarity, wordSimilarity) + bonus);
-    }
+normalizeTextAdvanced(texto) {
+    // Normalización avanzada como en Python
+    let normalizado = texto.toLowerCase();
+    
+    // Remover acentos (más completo)
+    const replacements = {
+        'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ü': 'u',
+        'ñ': 'n', 'ç': 'c', 'à': 'a', 'è': 'e', 'ì': 'i', 'ò': 'o', 'ù': 'u'
+    };
+    
+    Object.entries(replacements).forEach(([old, nuevo]) => {
+        normalizado = normalizado.replace(new RegExp(old, 'g'), nuevo);
+    });
+    
+    // Mantener solo letras, números y espacios
+    normalizado = normalizado.replace(/[^\w\s]/g, ' ');
+    
+    // Normalizar espacios
+    normalizado = normalizado.replace(/\s+/g, ' ').trim();
+    
+    return normalizado;
+}
 
-    normalizeText(text) {
-        return text.toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/[^\w\s]/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-    }
-
-    sequenceMatcher(str1, str2) {
-        const longer = str1.length > str2.length ? str1 : str2;
-        const shorter = str1.length > str2.length ? str2 : str1;
-        
-        if (longer.length === 0) return 1.0;
-        
-        const editDistance = this.levenshteinDistance(longer, shorter);
-        return (longer.length - editDistance) / longer.length;
-    }
+sequenceMatcherSimple(str1, str2) {
+    const longer = str1.length > str2.length ? str1 : str2;
+    const shorter = str1.length > str2.length ? str2 : str1;
+    
+    if (longer.length === 0) return 1.0;
+    
+    const editDistance = this.levenshteinDistance(longer, shorter);
+    return (longer.length - editDistance) / longer.length;
+}
 
     levenshteinDistance(str1, str2) {
         const matrix = [];
@@ -494,27 +516,24 @@ class PDFCombiner {
         return 'low';
     }
 
-// FUNCIÓN CORREGIDA - Reemplazar en js/combiner.js
+// === RENDERIZADO SIMPLIFICADO ===
 renderSearchResults() {
-    console.log('🔍 Renderizando resultados de búsqueda:', this.state.searchResults.length);
+    console.log('🔍 Renderizando resultados simplificados:', this.state.searchResults.length);
     
     const container = document.getElementById('search-results');
     const countElement = document.getElementById('matches-count');
     
-    if (!container) {
-        console.error('❌ Elemento search-results no encontrado');
-        return;
-    }
+    if (!container) return;
     
-    // Actualizar contador
+    // Calcular coincidencias confirmadas
     const confirmedInstrumentos = this.state.searchResults.filter(r => r.instrumentos.confirmed).length;
     const confirmedVoces = this.state.searchResults.filter(r => r.voces.confirmed).length;
+    const totalConfirmed = confirmedInstrumentos + confirmedVoces;
     
     if (countElement) {
-        countElement.textContent = `🎸${confirmedInstrumentos} | 🎤${confirmedVoces} de ${this.state.searchResults.length}`;
+        countElement.textContent = `${totalConfirmed} confirmadas`;
     }
 
-    // Si no hay resultados, mostrar placeholder
     if (this.state.searchResults.length === 0) {
         container.innerHTML = `
             <div class="placeholder">
@@ -526,34 +545,62 @@ renderSearchResults() {
         return;
     }
 
-    try {
-        // Crear HTML de forma más segura
-        const resultsHTML = this.state.searchResults.map((result, index) => {
-            return this.createResultItemHTML(result, index);
-        }).join('');
-
-        container.innerHTML = resultsHTML;
+    // Renderizado SIMPLIFICADO - solo lista básica
+    const html = this.state.searchResults.map((result, index) => {
+        const hasInstrumento = result.instrumentos.matches.length > 0;
+        const hasVoces = result.voces.matches.length > 0;
         
-        // Agregar event listeners después de insertar el HTML
-        this.attachSearchResultListeners();
-        
-        console.log('✅ Resultados renderizados exitosamente');
-        
-    } catch (error) {
-        console.error('❌ Error renderizando resultados:', error);
-        container.innerHTML = `
-            <div class="placeholder">
-                <div class="placeholder-icon">⚠️</div>
-                <p>Error mostrando resultados</p>
-                <p style="font-size: 0.9rem; color: var(--accent-red);">Revisa la consola para más detalles</p>
-                <button class="btn secondary" onclick="CombinerModule.debugSearchResults()">
-                    🔧 Debug
-                </button>
+        return `
+            <div class="search-result-simple" data-index="${index}">
+                <div class="result-header">
+                    <strong>${result.order}. "${result.searchTerm}"</strong>
+                </div>
+                <div class="result-matches">
+                    ${hasInstrumento ? `
+                        <div class="match-item">
+                            <span class="match-icon">🎸</span>
+                            <div class="match-info">
+                                <div class="match-name">${result.instrumentos.selectedMatch.name}</div>
+                                <div class="match-score">${Math.round(result.instrumentos.selectedMatch.similarity * 100)}%</div>
+                            </div>
+                            <button class="toggle-btn ${result.instrumentos.confirmed ? 'confirmed' : 'pending'}" 
+                                    onclick="CombinerModule.toggleSectionConfirmation(${index}, 'instrumentos')">
+                                ${result.instrumentos.confirmed ? '✅' : '❓'}
+                            </button>
+                        </div>
+                    ` : `
+                        <div class="match-item no-match">
+                            <span class="match-icon">🎸</span>
+                            <div class="match-info">Sin coincidencias</div>
+                        </div>
+                    `}
+                    
+                    ${hasVoces ? `
+                        <div class="match-item">
+                            <span class="match-icon">🎤</span>
+                            <div class="match-info">
+                                <div class="match-name">${result.voces.selectedMatch.name}</div>
+                                <div class="match-score">${Math.round(result.voces.selectedMatch.similarity * 100)}%</div>
+                            </div>
+                            <button class="toggle-btn ${result.voces.confirmed ? 'confirmed' : 'pending'}" 
+                                    onclick="CombinerModule.toggleSectionConfirmation(${index}, 'voces')">
+                                ${result.voces.confirmed ? '✅' : '❓'}
+                            </button>
+                        </div>
+                    ` : `
+                        <div class="match-item no-match">
+                            <span class="match-icon">🎤</span>
+                            <div class="match-info">Sin coincidencias</div>
+                        </div>
+                    `}
+                </div>
             </div>
         `;
-    }
-}
+    }).join('');
 
+    container.innerHTML = html;
+    console.log('✅ Resultados simplificados renderizados');
+}
 // NUEVA FUNCIÓN AUXILIAR - Agregar en js/combiner.js
 createResultItemHTML(result, index) {
     return `
@@ -670,61 +717,6 @@ attachSearchResultListeners() {
     });
 }
 
-// AGREGAR estas nuevas funciones auxiliares
-renderSectionResultSafe(sectionData, resultIndex, sectionType) {
-    if (sectionData.matches.length === 0) {
-        return `
-            <div style="display: flex; align-items: center; gap: var(--spacing-sm); opacity: 0.7;">
-                <div class="similarity-score low">0%</div>
-                <div style="flex: 1;">
-                    <div style="color: var(--accent-red);">❌ Sin coincidencias encontradas</div>
-                </div>
-            </div>
-        `;
-    }
-
-    const bestMatch = sectionData.selectedMatch;
-    const similarityPercent = Math.round(bestMatch.similarity * 100);
-    
-    let selectHtml = '';
-    if (sectionData.matches.length > 1) {
-        const options = sectionData.matches.map((match, matchIndex) => 
-            `<option value="${matchIndex}" ${matchIndex === 0 ? 'selected' : ''}>${match.name} (${Math.round(match.similarity * 100)}%)</option>`
-        ).join('');
-        
-        selectHtml = `
-            <select class="alternative-select" 
-                    onchange="CombinerModule.selectAlternativeMatch(${resultIndex}, '${sectionType}', this.value)" 
-                    style="background: var(--dark-gray); color: var(--text-primary); border: 1px solid var(--border-gray); padding: var(--spacing-xs); border-radius: var(--radius-sm); margin-top: var(--spacing-xs); width: 100%; font-size: 0.8rem;">
-                ${options}
-            </select>
-        `;
-    }
-    
-    return `
-        <div style="display: flex; align-items: flex-start; gap: var(--spacing-sm);">
-            <div class="similarity-score ${bestMatch.matchType}">${similarityPercent}%</div>
-            <div style="flex: 1;">
-                <div class="file-name" style="color: var(--text-primary); font-weight: 500; margin-bottom: var(--spacing-xs);">
-                    ${bestMatch.name}
-                </div>
-                <div class="match-status ${sectionData.confirmed ? 'confirmed' : 'suggested'}" style="font-size: 0.8rem; margin-top: var(--spacing-xs);">
-                    ${sectionData.confirmed ? '✅ Confirmado automáticamente' : '⚠️ Requiere confirmación'}
-                    • ${bestMatch.size}
-                </div>
-                ${selectHtml}
-            </div>
-            <div>
-                <button 
-                    class="btn confirm-btn ${sectionData.confirmed ? 'secondary' : ''}" 
-                    onclick="CombinerModule.toggleSectionConfirmation(${resultIndex}, '${sectionType}')"
-                    style="padding: var(--spacing-xs) var(--spacing-sm); font-size: 0.8rem; min-width: 60px;">
-                    ${sectionData.confirmed ? '✅' : '❓'}
-                </button>
-            </div>
-        </div>
-    `;
-}
 
 // FUNCIÓN DE DEBUG MEJORADA - Agregar en js/combiner.js
 debugSearchResults() {
@@ -835,53 +827,6 @@ Test canción inexistente`;
     } else {
         console.error('❌ Textarea no encontrado');
     }
-}
-renderSectionResult(sectionData, resultIndex, sectionType) {
-    if (sectionData.matches.length === 0) {
-        return `
-            <div style="display: flex; align-items: center; gap: var(--spacing-sm); opacity: 0.7;">
-                <div class="similarity-score low">0%</div>
-                <div style="flex: 1;">
-                    <div style="color: var(--accent-red);">
-                        ❌ Sin coincidencias encontradas
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    const bestMatch = sectionData.selectedMatch;
-    const similarityPercent = Math.round(bestMatch.similarity * 100);
-    
-    return `
-        <div style="display: flex; align-items: flex-start; gap: var(--spacing-sm);">
-            <div class="similarity-score ${bestMatch.matchType}">${similarityPercent}%</div>
-            <div style="flex: 1;">
-                <div class="file-name" style="color: var(--text-primary); font-weight: 500; margin-bottom: var(--spacing-xs);">${bestMatch.name}</div>
-                <div class="match-status ${sectionData.confirmed ? 'confirmed' : 'suggested'}" style="font-size: 0.8rem; margin-top: var(--spacing-xs);">
-                    ${sectionData.confirmed ? '✅ Confirmado automáticamente' : '⚠️ Requiere confirmación'}
-                    • ${bestMatch.size}
-                </div>
-                ${sectionData.matches.length > 1 ? `
-                    <select class="alternative-select" onchange="CombinerModule.selectAlternativeMatch(${resultIndex}, '${sectionType}', this.value)" style="background: var(--dark-gray); color: var(--text-primary); border: 1px solid var(--border-gray); padding: var(--spacing-xs); border-radius: var(--radius-sm); margin-top: var(--spacing-xs); width: 100%; font-size: 0.8rem;">
-                        ${sectionData.matches.map((match, matchIndex) => `
-                            <option value="${matchIndex}" ${matchIndex === 0 ? 'selected' : ''}>
-                                ${match.name} (${Math.round(match.similarity * 100)}%)
-                            </option>
-                        `).join('')}
-                    </select>
-                ` : ''}
-            </div>
-            <div>
-                <button 
-                    class="btn confirm-btn ${sectionData.confirmed ? 'secondary' : ''}" 
-                    onclick="CombinerModule.toggleSectionConfirmation(${resultIndex}, '${sectionType}')"
-                    style="padding: var(--spacing-xs) var(--spacing-sm); font-size: 0.8rem; min-width: 60px;">
-                    ${sectionData.confirmed ? '✅' : '❓'}
-                </button>
-            </div>
-        </div>
-    `;
 }
 
     selectAlternativeMatch(resultIndex, sectionType, matchIndex) {
