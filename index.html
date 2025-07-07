@@ -48,16 +48,12 @@
     <link rel="preconnect" href="https://drive.google.com" crossorigin>
     <link rel="dns-prefetch" href="https://www.gstatic.com">
     
-    <!-- Google Identity Services -->
+    <!-- EXTERNAL LIBRARIES -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    
-    <!-- PDF.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    
-    <!-- PDF-lib para combinación de PDFs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
     
-    <!-- Estilos adicionales para autenticación -->
+    <!-- ESTILOS ADICIONALES -->
     <style>
         .auth-status {
             display: inline-flex;
@@ -79,6 +75,44 @@
             background: var(--accent-red);
             color: white;
         }
+        
+        .auth-status.connecting {
+            background: var(--medium-gray);
+            color: var(--text-primary);
+        }
+        
+        .auth-status.offline {
+            background: #6c757d;
+            color: white;
+        }
+
+        /* Notificaciones */
+        .notification-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--spacing-md);
+        }
+
+        .notification-close {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 0;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background var(--transition-fast);
+        }
+
+        .notification-close:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
     </style>
 </head>
 <body>
@@ -89,9 +123,9 @@
                 <div class="logo-section">
                     <div class="logo-placeholder">🎵</div>
                     <h1>Music PDF Manager</h1>
-                    <div id="auth-status" class="auth-status">
+                    <div id="auth-status" class="auth-status connecting">
                         <span id="auth-icon">🔄</span>
-                        <span id="auth-text">Conectando...</span>
+                        <span id="auth-text">Iniciando...</span>
                     </div>
                 </div>
                 <nav class="nav-tabs">
@@ -193,23 +227,23 @@
                 </div>
             </div>
 
-            <!-- Módulo 2: Combinador (Placeholder) -->
+            <!-- Módulo 2: Combinador (Se carga dinámicamente) -->
             <div id="combiner-module" class="module">
-                <div class="module-header">
-                    <h2>🔗 Módulo de Combinación</h2>
-                </div>
                 <div class="placeholder">
-                    <p>Módulo en desarrollo...</p>
+                    <div class="placeholder-icon">🔗</div>
+                    <p>Cargando módulo...</p>
                 </div>
             </div>
 
-            <!-- Módulo 3: Musical (Placeholder) -->
+            <!-- Módulo 3: Musical (Futuro) -->
             <div id="musical-module" class="module">
                 <div class="module-header">
                     <h2>🎼 Módulo Musical Instructivo</h2>
                 </div>
                 <div class="placeholder">
-                    <p>Módulo en desarrollo...</p>
+                    <div class="placeholder-icon">🚧</div>
+                    <h3>En Desarrollo</h3>
+                    <p>Módulo para reconocimiento de acordes y transposición</p>
                 </div>
             </div>
         </main>
@@ -223,56 +257,53 @@
         </div>
     </div>
 
-    <!-- Scripts en ORDEN CORRECTO -->
-    <script>
-        // Verificar que Google Identity Services se cargó
-        console.log('🔍 Verificando Google Identity Services...');
-        
-        function checkGoogleIdentityServices() {
-            if (typeof google !== 'undefined' && google.accounts) {
-                console.log('✅ Google Identity Services cargado correctamente');
-                return true;
-            } else {
-                console.warn('⚠️ Google Identity Services no está disponible');
-                return false;
-            }
-        }
-        
-        // Intentar verificar después de un delay
-        setTimeout(checkGoogleIdentityServices, 1000);
-    </script>
+    <!-- APPLICATION SCRIPTS (Orden importante) -->
     
     <!-- 1. Configuración -->
     <script src="config/drive-config.js"></script>
     
-    <!-- 2. Módulos de Drive (orden importante) -->
+    <!-- 2. Utilidades base -->
     <script src="js/drive-utils.js"></script>
+    
+    <!-- 3. Módulos de autenticación y archivos -->
     <script src="js/drive-auth.js"></script>
     <script src="js/drive-files.js"></script>
     <script src="js/drive-api.js"></script>
     
-    <!-- 3. Otros módulos -->
+    <!-- 4. Funcionalidades específicas -->
     <script src="js/pdf-viewer.js"></script>
     <script src="js/search-utils.js"></script>
     <script src="js/search.js"></script>
+    
+    <!-- 5. Módulos de la aplicación -->
     <script src="js/pdf-combiner-real.js"></script>
     <script src="js/combiner.js"></script>
+    
+    <!-- 6. Utilidades de la aplicación -->
+    <script src="js/ui-handlers.js"></script>
+    <script src="js/app-utils.js"></script>
+    
+    <!-- 7. Aplicación principal (debe ir al final) -->
     <script src="js/main.js"></script>
     
+    <!-- Verificación de carga (solo en desarrollo) -->
     <script>
-        // Debug script para verificar carga de archivos
         window.addEventListener('load', function() {
-            console.log('🔍 Verificando carga de scripts...');
-            console.log('📊 ConfigUtils:', typeof ConfigUtils !== 'undefined' ? '✅' : '❌');
-            console.log('📊 DriveUtils:', typeof DriveUtils !== 'undefined' ? '✅' : '❌');
-            console.log('📊 DriveAuth:', typeof DriveAuth !== 'undefined' ? '✅' : '❌');
-            console.log('📊 DriveFiles:', typeof DriveFiles !== 'undefined' ? '✅' : '❌');
-            console.log('📊 DriveAPIGIS:', typeof DriveAPIGIS !== 'undefined' ? '✅' : '❌');
-            console.log('📊 PDFViewer:', typeof PDFViewer !== 'undefined' ? '✅' : '❌');
-            console.log('📊 SearchUtils:', typeof SearchUtils !== 'undefined' ? '✅' : '❌');
-            console.log('📊 SearchManager:', typeof SearchManager !== 'undefined' ? '✅' : '❌');
-            console.log('📊 CombinerModule:', typeof CombinerModule !== 'undefined' ? '✅' : '❌');
-            console.log('📊 Google Identity:', typeof google !== 'undefined' && google.accounts ? '✅' : '❌');
+            if (window.APP_CONFIG?.DEBUG_MODE) {
+                const modules = [
+                    'ConfigUtils', 'DriveUtils', 'DriveAuth', 'DriveFiles', 'DriveAPIGIS',
+                    'PDFViewer', 'SearchUtils', 'SearchManager', 'CombinerModule',
+                    'UIHandlers', 'AppUtils', 'Google Identity Services'
+                ];
+                
+                console.log('🔍 Verificación de módulos:');
+                modules.forEach(module => {
+                    const available = module === 'Google Identity Services' ? 
+                        (typeof google !== 'undefined' && google.accounts) :
+                        (typeof window[module] !== 'undefined');
+                    console.log(`${available ? '✅' : '❌'} ${module}`);
+                });
+            }
         });
     </script>
 </body>

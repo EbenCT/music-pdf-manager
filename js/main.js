@@ -1,35 +1,28 @@
 /**
- * MUSIC PDF MANAGER - MAIN APPLICATION OPTIMIZADO
- * SIN LÍMITES + AUTENTICACIÓN PERMANENTE + CARGA DINÁMICA DE MÓDULOS
+ * MUSIC PDF MANAGER - MAIN APPLICATION (REFACTORIZADO)
+ * Aplicación principal optimizada y limpia
  */
 
-// === ESTADO GLOBAL DE LA APLICACIÓN ===
+// === ESTADO GLOBAL ===
 const AppState = {
     currentModule: 'visualizer',
     currentPDF: null,
-    files: {
-        instrumentos: [],
-        voces: []
-    },
-    filteredFiles: {
-        instrumentos: [],
-        voces: []
-    },
+    files: { instrumentos: [], voces: [] },
+    filteredFiles: { instrumentos: [], voces: [] },
     searchQuery: '',
     isLoading: false,
     pdfViewer: null,
     driveAPI: null,
     isAuthenticated: false,
-    lastAuthCheck: null,
     isLoadingFiles: false,
     loadingProgress: {
         instrumentos: { current: 0, total: 0, status: 'waiting' },
         voces: { current: 0, total: 0, status: 'waiting' }
     },
-    loadedModules: new Set(['visualizer']) // Módulos ya cargados
+    loadedModules: new Set(['visualizer'])
 };
 
-// === CONTROLADOR PRINCIPAL DE LA APLICACIÓN ===
+// === CONTROLADOR PRINCIPAL ===
 class MusicPDFManager {
     constructor() {
         this.config = ConfigUtils.getConfig();
@@ -39,8 +32,6 @@ class MusicPDFManager {
 
     async init() {
         try {
-            console.log('🎵 Iniciando Music PDF Manager OPTIMIZADO...');
-            
             if (!this.config.credentialsValid) {
                 throw new Error('Credenciales de Google Drive no válidas');
             }
@@ -54,7 +45,6 @@ class MusicPDFManager {
             await this.tryAutoAuthentication();
             
         } catch (error) {
-            console.error('❌ Error al inicializar aplicación:', error);
             this.showCriticalError(error.message);
         }
     }
@@ -93,7 +83,6 @@ class MusicPDFManager {
     }
 
     setupEventListeners() {
-        // Navegación entre módulos
         document.querySelectorAll('.nav-tab').forEach(tab => {
             tab.addEventListener('click', (e) => {
                 const module = e.target.dataset.module;
@@ -101,7 +90,6 @@ class MusicPDFManager {
             });
         });
 
-        // Controles del visualizador PDF
         const zoomInBtn = document.getElementById('zoom-in');
         const zoomOutBtn = document.getElementById('zoom-out');
         const fullscreenBtn = document.getElementById('fullscreen');
@@ -117,28 +105,21 @@ class MusicPDFManager {
     async switchModule(moduleName) {
         AppState.currentModule = moduleName;
 
-        // Actualizar pestañas de navegación
         document.querySelectorAll('.nav-tab').forEach(tab => {
             tab.classList.remove('active');
         });
         document.querySelector(`[data-module="${moduleName}"]`).classList.add('active');
 
-        // Mostrar módulo correspondiente
         document.querySelectorAll('.module').forEach(module => {
             module.classList.remove('active');
         });
 
-        // Cargar contenido dinámicamente si es necesario
         await this.loadModuleContent(moduleName);
-
         document.getElementById(`${moduleName}-module`).classList.add('active');
-
-        // Inicializar módulo específico
         this.initializeModule(moduleName);
     }
 
     async loadModuleContent(moduleName) {
-        // Si el módulo ya está cargado, no hacer nada
         if (AppState.loadedModules.has(moduleName)) {
             return;
         }
@@ -148,9 +129,6 @@ class MusicPDFManager {
             
             switch (moduleName) {
                 case 'combiner':
-                    console.log('🔗 Cargando contenido del Módulo Combinador...');
-                    
-                    // Cargar el HTML del módulo
                     const response = await fetch('modules/combiner.html');
                     if (!response.ok) {
                         throw new Error(`Error cargando módulo: ${response.statusText}`);
@@ -158,25 +136,19 @@ class MusicPDFManager {
                     
                     const html = await response.text();
                     moduleContainer.innerHTML = html;
-                    
                     AppState.loadedModules.add('combiner');
-                    console.log('✅ Módulo Combinador cargado');
                     break;
                     
                 case 'musical':
                     // Módulo musical (futuro)
-                    console.log('🎼 Módulo Musical pendiente de implementación');
                     break;
                     
                 case 'visualizer':
-                    // El visualizador ya está en el HTML principal
+                    // Ya está en el HTML principal
                     break;
             }
             
         } catch (error) {
-            console.error(`❌ Error cargando módulo ${moduleName}:`, error);
-            
-            // Mostrar error en el contenedor del módulo
             const moduleContainer = document.getElementById(`${moduleName}-module`);
             moduleContainer.innerHTML = `
                 <div class="module-header">
@@ -200,23 +172,10 @@ class MusicPDFManager {
 
     initializeModule(moduleName) {
         switch (moduleName) {
-            case 'visualizer':
-                // El visualizador ya está inicializado
-                break;
-                
             case 'combiner':
-                // Inicializar el módulo combinador
                 if (window.CombinerModule && typeof window.CombinerModule.init === 'function') {
-                    console.log('🔗 Inicializando Módulo Combinador...');
                     window.CombinerModule.init();
-                } else {
-                    console.warn('⚠️ CombinerModule no disponible');
                 }
-                break;
-                
-            case 'musical':
-                // Módulo musical (pendiente de implementación)
-                console.log('🎼 Módulo Musical aún no implementado');
                 break;
         }
     }
@@ -240,12 +199,10 @@ class MusicPDFManager {
                     this.handleTokenExpired();
                 }
             }
-        }, 300000); // Cada 5 minutos
+        }, 300000);
     }
 
     handleTokenExpired() {
-        console.log('⏰ Token expirado, intentando renovación automática...');
-        
         if (this.driveAPI.driveAuth.refreshTokenSilently) {
             this.driveAPI.driveAuth.refreshTokenSilently()
                 .then(success => {
@@ -278,11 +235,9 @@ class MusicPDFManager {
         if (AppState.isLoadingFiles) return;
 
         AppState.isLoadingFiles = true;
-        this.showLoading(true, 'Cargando TODOS los archivos PDF...');
+        this.showLoading(true, 'Cargando archivos PDF...');
         
         try {
-            console.log('📁 Cargando TODOS los archivos desde Google Drive...');
-
             if (!this.driveAPI || !AppState.isAuthenticated || !this.driveAPI.isSignedIn || !this.driveAPI.isTokenValid()) {
                 throw new Error('No hay sesión válida de Google Drive');
             }
@@ -296,23 +251,17 @@ class MusicPDFManager {
 
             AppState.files.instrumentos = instrumentosFiles;
             AppState.files.voces = vocesFiles;
-            AppState.lastAuthCheck = Date.now();
 
             this.sortFiles();
             this.updateFileLists();
             this.updateFileCounts();
             this.updateUI('files-loaded');
 
-            // Actualizar el módulo combinador si está activo
             if (AppState.currentModule === 'combiner' && window.CombinerModule) {
-                console.log('🔗 Actualizando archivos en Módulo Combinador...');
                 window.CombinerModule.init();
             }
 
-            console.log(`✅ CARGA COMPLETA: ${instrumentosFiles.length} instrumentos + ${vocesFiles.length} voces = ${instrumentosFiles.length + vocesFiles.length} archivos totales`);
-
         } catch (error) {
-            console.error('❌ Error cargando archivos:', error);
             this.showDriveError(DriveUtils.getFriendlyErrorMessage(error));
         } finally {
             AppState.isLoadingFiles = false;
@@ -323,8 +272,7 @@ class MusicPDFManager {
     async loadFilesWithProgress(folderType) {
         try {
             AppState.loadingProgress[folderType].status = 'loading';
-            
-            this.updateLoadingProgress(folderType, 'Iniciando carga...');
+            this.updateLoadingProgress(folderType, 'Cargando...');
             
             const files = await this.driveAPI.getFiles(folderType);
             
@@ -332,13 +280,13 @@ class MusicPDFManager {
             AppState.loadingProgress[folderType].total = files.length;
             AppState.loadingProgress[folderType].current = files.length;
             
-            this.updateLoadingProgress(folderType, `✅ ${files.length} archivos cargados`);
+            this.updateLoadingProgress(folderType, `${files.length} archivos`);
             
             return files;
             
         } catch (error) {
             AppState.loadingProgress[folderType].status = 'error';
-            this.updateLoadingProgress(folderType, `❌ Error: ${error.message}`);
+            this.updateLoadingProgress(folderType, `Error: ${error.message}`);
             throw error;
         }
     }
@@ -366,16 +314,16 @@ class MusicPDFManager {
         switch (state) {
             case 'auth-required':
                 if (currentPDFTitle) {
-                    currentPDFTitle.textContent = 'Autenticación permanente requerida';
+                    currentPDFTitle.textContent = 'Autenticación requerida';
                 }
-                this.showPlaceholderInLists('🔐 Autoriza una vez para acceso permanente a TODOS tus PDFs');
+                this.showPlaceholderInLists('🔐 Autoriza para acceder a tus PDFs');
                 break;
                 
             case 'token-expired':
                 if (currentPDFTitle) {
-                    currentPDFTitle.textContent = 'Renovando sesión automáticamente...';
+                    currentPDFTitle.textContent = 'Renovando sesión...';
                 }
-                this.showPlaceholderInLists('⏰ Renovando acceso automático...');
+                this.showPlaceholderInLists('⏰ Renovando acceso...');
                 break;
                 
             case 'files-loaded':
@@ -493,7 +441,7 @@ class MusicPDFManager {
                     <h3>No hay archivos PDF</h3>
                     <p>No se encontraron archivos en la carpeta de ${section}</p>
                     <button class="btn secondary" onclick="window.app.retryLoadFiles()">
-                        🔄 Recargar todos los archivos
+                        🔄 Recargar archivos
                     </button>
                 </div>
             `;
@@ -571,9 +519,6 @@ class MusicPDFManager {
                 <div style="margin-top: var(--spacing-lg);">
                     <button class="btn secondary" onclick="window.app.retryLoadFiles()">
                         🔄 Recargar archivos
-                    </button>
-                    <button class="btn secondary" onclick="window.debugDriveConnection()" style="margin-left: var(--spacing-sm);">
-                        🔧 Debug Conexión
                     </button>
                 </div>
             </div>
@@ -690,15 +635,6 @@ class MusicPDFManager {
                     <div style="font-size: 4rem; margin-bottom: var(--spacing-lg);">⚠️</div>
                     <h2>Error de Configuración</h2>
                     <p style="margin-bottom: var(--spacing-lg);">${message}</p>
-                    <div style="background: var(--dark-gray); padding: var(--spacing-lg); border-radius: var(--radius-md); max-width: 600px; margin: 0 auto;">
-                        <h3 style="color: var(--text-primary); margin-bottom: var(--spacing-md);">Pasos para solucionar:</h3>
-                        <ol style="text-align: left; color: var(--text-secondary);">
-                            <li>Verificar credenciales en Google Cloud Console</li>
-                            <li>Comprobar que las carpetas de Drive sean accesibles</li>
-                            <li>Asegurar que la URL esté en dominios autorizados</li>
-                            <li>Verificar que todos los módulos estén cargados</li>
-                        </ol>
-                    </div>
                     <button class="btn" onclick="location.reload()" style="margin-top: var(--spacing-lg);">
                         🔄 Reintentar
                     </button>
@@ -716,19 +652,13 @@ class MusicPDFManager {
                         <div style="font-size: 2rem; margin-bottom: var(--spacing-md);">☁️</div>
                         <h3>Error de Google Drive</h3>
                         <p style="color: var(--accent-red); margin-bottom: var(--spacing-md);">${message}</p>
-                        <div style="margin-top: var(--spacing-md);">
-                            <button class="btn secondary" onclick="window.app.retryConnection()">
-                                🔄 Reconectar
-                            </button>
-                            <button class="btn secondary" onclick="window.debugDriveConnection()" style="margin-left: var(--spacing-sm);">
-                                🔧 Debug
-                            </button>
-                        </div>
+                        <button class="btn secondary" onclick="window.app.retryConnection()">
+                            🔄 Reconectar
+                        </button>
                     </div>
                 `;
             }
         });
-        console.error('❌ Error de Google Drive:', message);
     }
 
     setupSearch() {
@@ -745,77 +675,28 @@ class MusicPDFManager {
             await this.driveAPI.signOut();
         }
     }
-
-    getLoadingStats() {
-        const totalFiles = AppState.files.instrumentos.length + AppState.files.voces.length;
-        const loadedSections = Object.values(AppState.loadingProgress)
-            .filter(p => p.status === 'completed').length;
-        
-        return {
-            totalFiles,
-            sections: {
-                instrumentos: AppState.files.instrumentos.length,
-                voces: AppState.files.voces.length
-            },
-            loadingProgress: AppState.loadingProgress,
-            completedSections: loadedSections,
-            isFullyLoaded: loadedSections === 2,
-            loadedModules: Array.from(AppState.loadedModules)
-        };
-    }
-
-    async forceFullReload() {
-        console.log('🔄 Forzando recarga completa...');
-        
-        if (window.clearAppCache) {
-            window.clearAppCache();
-        }
-        
-        AppState.files = { instrumentos: [], voces: [] };
-        AppState.filteredFiles = { instrumentos: [], voces: [] };
-        AppState.isLoadingFiles = false;
-        AppState.loadingProgress = {
-            instrumentos: { current: 0, total: 0, status: 'waiting' },
-            voces: { current: 0, total: 0, status: 'waiting' }
-        };
-        
-        await this.loadAllFiles();
-    }
 }
 
-// === INICIALIZACIÓN DE LA APLICACIÓN ===
+// === INICIALIZACIÓN ===
 document.addEventListener('DOMContentLoaded', () => {
     const dependencies = [
         { name: 'ConfigUtils', obj: typeof ConfigUtils !== 'undefined' },
         { name: 'DriveUtils', obj: typeof DriveUtils !== 'undefined' },
-        { name: 'DriveAuth', obj: typeof DriveAuth !== 'undefined' },
-        { name: 'DriveFiles', obj: typeof DriveFiles !== 'undefined' },
         { name: 'DriveAPIGIS', obj: typeof DriveAPIGIS !== 'undefined' },
         { name: 'SearchUtils', obj: typeof SearchUtils !== 'undefined' },
         { name: 'SearchManager', obj: typeof SearchManager !== 'undefined' },
         { name: 'PDFViewer', obj: typeof PDFViewer !== 'undefined' },
-        { name: 'CombinerModule', obj: typeof CombinerModule !== 'undefined' },
         { name: 'Google Identity', obj: typeof google !== 'undefined' && google.accounts }
     ];
 
     const missingDeps = dependencies.filter(dep => !dep.obj);
     
     if (missingDeps.length > 0) {
-        console.error('❌ Dependencias faltantes:', missingDeps.map(d => d.name));
-        
         document.querySelector('.main-content').innerHTML = `
             <div style="text-align: center; padding: var(--spacing-xxl); color: var(--accent-red);">
                 <div style="font-size: 4rem; margin-bottom: var(--spacing-lg);">🔧</div>
                 <h2>Error de Módulos</h2>
                 <p style="margin-bottom: var(--spacing-lg);">Faltan módulos requeridos: ${missingDeps.map(d => d.name).join(', ')}</p>
-                <div style="background: var(--dark-gray); padding: var(--spacing-lg); border-radius: var(--radius-md); max-width: 600px; margin: 0 auto;">
-                    <h3 style="color: var(--text-primary); margin-bottom: var(--spacing-md);">Módulos verificados:</h3>
-                    <ul style="text-align: left; color: var(--text-secondary);">
-                        ${dependencies.map(dep => 
-                            `<li>${dep.name}: ${dep.obj ? '✅' : '❌'}</li>`
-                        ).join('')}
-                    </ul>
-                </div>
                 <button class="btn" onclick="location.reload()" style="margin-top: var(--spacing-lg);">
                     🔄 Reintentar
                 </button>
@@ -824,109 +705,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    console.log('🚀 Iniciando aplicación OPTIMIZADA con Carga Dinámica de Módulos...');
     window.app = new MusicPDFManager();
 });
 
-// === EXPORTAR PARA DEBUGGING ===
+// === EXPORTAR ===
 window.AppState = AppState;
-
-// === FUNCIONES DE DEBUG OPTIMIZADAS ===
-window.debugAppState = function() {
-    console.group('🔍 DEBUG DE ESTADO GLOBAL OPTIMIZADO');
-    
-    const stats = window.app ? window.app.getLoadingStats() : null;
-    
-    console.log('📊 Archivos cargados:', stats || {
-        instrumentos: AppState.files.instrumentos.length,
-        voces: AppState.files.voces.length,
-        total: AppState.files.instrumentos.length + AppState.files.voces.length
-    });
-    
-    console.log('📊 Estado de carga:', AppState.loadingProgress);
-    console.log('📊 Módulo actual:', AppState.currentModule);
-    console.log('📊 Módulos cargados:', Array.from(AppState.loadedModules));
-    
-    console.log('📊 Auth:', {
-        isAuthenticated: AppState.isAuthenticated,
-        isLoadingFiles: AppState.isLoadingFiles,
-        tokenValid: AppState.driveAPI ? AppState.driveAPI.isTokenValid() : false
-    });
-    
-    if (AppState.driveAPI) {
-        console.log('🔐 Estado de conexión:', AppState.driveAPI.driveAuth?.getConnectionStatus());
-    }
-
-    // Debug del módulo combinador
-    if (window.CombinerModule && typeof window.CombinerModule.getState === 'function') {
-        console.log('🔗 Estado Combinador:', window.CombinerModule.getState());
-    }
-    
-    console.groupEnd();
-};
-
-window.forceFullReload = function() {
-    if (window.app && window.app.forceFullReload) {
-        window.app.forceFullReload();
-    } else {
-        console.log('🔄 Función no disponible, recargando página...');
-        location.reload();
-    }
-};
-
-window.showLoadingStats = function() {
-    if (window.app) {
-        const stats = window.app.getLoadingStats();
-        console.table(stats);
-        console.log('📊 Estadísticas detalladas:', stats);
-    } else {
-        console.error('❌ App no disponible');
-    }
-};
-
-window.clearAppCache = function() {
-    if (DriveUtils && DriveUtils.cache) {
-        DriveUtils.cache.clear();
-    }
-    
-    if (window.app && window.app.searchManager && window.app.searchManager.clearSearchHistory) {
-        window.app.searchManager.clearSearchHistory();
-    }
-    
-    const keysToKeep = ['gdrive_access_token', 'gdrive_token_expiry', 'gdrive_user_info', 'gdrive_refresh_token', 'gdrive_last_auth'];
-    Object.keys(localStorage).forEach(key => {
-        if (!keysToKeep.includes(key)) {
-            localStorage.removeItem(key);
-        }
-    });
-    
-    console.log('✅ Cache limpiado (tokens de auth conservados)');
-};
-
-// === FUNCIÓN PARA TESTEAR EL MÓDULO COMBINADOR ===
-window.testCombinerModule = function() {
-    console.group('🔗 TEST MÓDULO COMBINADOR');
-    
-    if (typeof CombinerModule === 'undefined') {
-        console.error('❌ CombinerModule no está cargado');
-        return;
-    }
-    
-    console.log('✅ CombinerModule disponible');
-    console.log('📊 Estado actual:', window.CombinerModule.getState());
-    
-    // Cambiar al módulo combinador
-    if (window.app && AppState.currentModule !== 'combiner') {
-        console.log('🔄 Cambiando al módulo combinador...');
-        window.app.switchModule('combiner');
-    }
-    
-    // Verificar archivos disponibles
-    const state = window.CombinerModule.getState();
-    const totalFiles = state.availableFiles.instrumentos.length + state.availableFiles.voces.length;
-    console.log(`📁 Archivos disponibles: ${totalFiles} (${state.availableFiles.instrumentos.length} instrumentos + ${state.availableFiles.voces.length} voces)`);
-    
-    console.groupEnd();
-};
-
-console.log('🎵 Main App cargada: MODO OPTIMIZADO - CARGA DINÁMICA DE MÓDULOS');
