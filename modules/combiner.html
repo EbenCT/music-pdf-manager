@@ -1,0 +1,155 @@
+<!-- TEMPLATE DEL MÓDULO COMBINADOR -->
+<!-- Este archivo se carga dinámicamente cuando se activa el módulo -->
+
+<div class="module-header">
+    <h2>🔗 Módulo de Combinación</h2>
+    <p>Combina múltiples archivos PDF en uno solo</p>
+</div>
+
+<!-- Pestañas de modo -->
+<div class="combiner-tabs">
+    <button class="combiner-tab active" data-tab="manual">
+        📋 Modo Manual
+    </button>
+    <button class="combiner-tab" data-tab="automatic">
+        🤖 Modo Automático
+    </button>
+</div>
+
+<!-- MODO MANUAL -->
+<div id="manual-tab" class="tab-content active">
+    <div class="combiner-grid">
+        <!-- Panel de selección de archivos -->
+        <div class="combiner-panel">
+            <div class="panel-header">
+                <h3>📄 Archivos Disponibles</h3>
+                <button class="btn secondary small" onclick="CombinerModule.clearAllSelections()">
+                    Limpiar Todo
+                </button>
+            </div>
+            
+            <div class="file-list" id="available-files">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    Cargando archivos...
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel de archivos seleccionados -->
+        <div class="combiner-panel">
+            <div class="panel-header">
+                <h3>✅ Archivos Seleccionados</h3>
+                <span id="selected-count" class="count">0</span>
+            </div>
+            
+            <div class="file-list" id="selected-files">
+                <div class="placeholder">
+                    <div class="placeholder-icon">📋</div>
+                    <p>Selecciona archivos de la lista izquierda</p>
+                    <p style="font-size: 0.9rem; color: var(--text-muted);">Puedes arrastrar para reordenar</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODO AUTOMÁTICO -->
+<div id="automatic-tab" class="tab-content">
+    <div class="combiner-grid">
+        <!-- Panel de entrada de texto -->
+        <div class="combiner-panel">
+            <div class="panel-header">
+                <h3>📝 Lista de Canciones</h3>
+                <span style="font-size: 0.9rem; color: var(--text-muted);">Una por línea</span>
+            </div>
+            
+            <textarea 
+                id="song-list-textarea"
+                class="song-list-textarea"
+                placeholder="Escribe aquí los nombres de las canciones que quieres combinar...
+
+Ejemplo:
+Ahora es tiempo de alabar a Dios
+Vine a alabar a Dios
+Magnifiquemos al Señor
+Esta es la confianza que tenemos en el
+Mas el Dios de toda gracias"
+            ></textarea>
+            
+            <div class="similarity-settings">
+                <label>Umbral de similitud:</label>
+                <input 
+                    type="range" 
+                    id="similarity-threshold"
+                    class="similarity-slider"
+                    min="0.1" 
+                    max="1.0" 
+                    step="0.05" 
+                    value="0.6"
+                >
+                <span id="similarity-value" class="similarity-value">60%</span>
+            </div>
+        </div>
+
+        <!-- Panel de resultados de búsqueda -->
+        <div class="combiner-panel">
+            <div class="panel-header">
+                <h3>🔍 Resultados de Búsqueda</h3>
+                <span id="matches-count" class="count">0</span>
+            </div>
+            
+            <div class="file-list" id="search-results">
+                <div class="placeholder">
+                    <div class="placeholder-icon">🤖</div>
+                    <p>Escribe los nombres de las canciones arriba</p>
+                    <p style="font-size: 0.9rem; color: var(--text-muted);">El sistema buscará automáticamente</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Botones de acción -->
+<div class="combiner-actions">
+    <button class="btn secondary" onclick="CombinerModule.clearAll()">
+        🗑️ Limpiar Todo
+    </button>
+    <button class="btn" id="search-btn" onclick="CombinerModule.searchSongs()" style="display: none;">
+        🔍 Buscar Coincidencias
+    </button>
+    <button class="btn" id="preview-btn" onclick="CombinerModule.showPreview()" disabled>
+        👁️ Vista Previa
+    </button>
+    <button class="btn" id="combine-btn" onclick="CombinerModule.combineFiles()" disabled>
+        🔗 Combinar PDFs
+    </button>
+</div>
+
+<!-- Modal de Vista Previa -->
+<div id="preview-modal" class="loading-overlay">
+    <div class="loading-spinner preview-content">
+        <div class="viewer-header">
+            <h3>👁️ Vista Previa del PDF Combinado</h3>
+            <button class="control-btn" onclick="CombinerModule.closePreview()">✕</button>
+        </div>
+        
+        <div style="margin-bottom: var(--spacing-lg);">
+            <p><strong>Total de archivos:</strong> <span id="preview-count">0</span></p>
+            <p><strong>Orden de combinación:</strong></p>
+        </div>
+        
+        <div class="preview-list" id="preview-list">
+            <!-- Lista de archivos a combinar -->
+        </div>
+        
+        <div class="combiner-actions">
+            <button class="btn secondary" onclick="CombinerModule.closePreview()">
+                ❌ Cancelar
+            </button>
+            <button class="btn" onclick="CombinerModule.confirmCombination()">
+                ✅ Confirmar y Combinar
+            </button>
+        </div>
+    </div>
+</div>

@@ -1,6 +1,6 @@
 /**
  * MUSIC PDF MANAGER - MAIN APPLICATION OPTIMIZADO
- * SIN LÍMITES + AUTENTICACIÓN PERMANENTE
+ * SIN LÍMITES + AUTENTICACIÓN PERMANENTE + CARGA DINÁMICA DE MÓDULOS
  */
 
 // === ESTADO GLOBAL DE LA APLICACIÓN ===
@@ -22,11 +22,11 @@ const AppState = {
     isAuthenticated: false,
     lastAuthCheck: null,
     isLoadingFiles: false,
-    // ← NUEVO: Estado de carga
     loadingProgress: {
         instrumentos: { current: 0, total: 0, status: 'waiting' },
         voces: { current: 0, total: 0, status: 'waiting' }
-    }
+    },
+    loadedModules: new Set(['visualizer']) // Módulos ya cargados
 };
 
 // === CONTROLADOR PRINCIPAL DE LA APLICACIÓN ===
@@ -69,7 +69,6 @@ class MusicPDFManager {
         await this.driveAPI.init();
     }
 
-    // ← MODIFICADO: Auto-auth más agresiva
     async tryAutoAuthentication() {
         if (this.driveAPI.isSignedIn && this.driveAPI.isTokenValid()) {
             AppState.isAuthenticated = true;
@@ -78,7 +77,6 @@ class MusicPDFManager {
             return;
         }
         
-        // ← NUEVO: Intentar recuperar auth almacenada
         const recovered = await this.driveAPI.driveAuth.recoverStoredAuth();
         if (recovered) {
             AppState.isAuthenticated = true;
@@ -95,6 +93,7 @@ class MusicPDFManager {
     }
 
     setupEventListeners() {
+        // Navegación entre módulos
         document.querySelectorAll('.nav-tab').forEach(tab => {
             tab.addEventListener('click', (e) => {
                 const module = e.target.dataset.module;
@@ -102,6 +101,7 @@ class MusicPDFManager {
             });
         });
 
+        // Controles del visualizador PDF
         const zoomInBtn = document.getElementById('zoom-in');
         const zoomOutBtn = document.getElementById('zoom-out');
         const fullscreenBtn = document.getElementById('fullscreen');
@@ -112,6 +112,113 @@ class MusicPDFManager {
 
         this.setupAuthEventListener();
         this.startTokenValidationTimer();
+    }
+
+    async switchModule(moduleName) {
+        AppState.currentModule = moduleName;
+
+        // Actualizar pestañas de navegación
+        document.querySelectorAll('.nav-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        document.querySelector(`[data-module="${moduleName}"]`).classList.add('active');
+
+        // Mostrar módulo correspondiente
+        document.querySelectorAll('.module').forEach(module => {
+            module.classList.remove('active');
+        });
+
+        // Cargar contenido dinámicamente si es necesario
+        await this.loadModuleContent(moduleName);
+
+        document.getElementById(`${moduleName}-module`).classList.add('active');
+
+        // Inicializar módulo específico
+        this.initializeModule(moduleName);
+    }
+
+    async loadModuleContent(moduleName) {
+        // Si el módulo ya está cargado, no hacer nada
+        if (AppState.loadedModules.has(moduleName)) {
+            return;
+        }
+
+        try {
+            const moduleContainer = document.getElementById(`${moduleName}-module`);
+            
+            switch (moduleName) {
+                case 'combiner':
+                    console.log('🔗 Cargando contenido del Módulo Combinador...');
+                    
+                    // Cargar el HTML del módulo
+                    const response = await fetch('modules/combiner.html');
+                    if (!response.ok) {
+                        throw new Error(`Error cargando módulo: ${response.statusText}`);
+                    }
+                    
+                    const html = await response.text();
+                    moduleContainer.innerHTML = html;
+                    
+                    AppState.loadedModules.add('combiner');
+                    console.log('✅ Módulo Combinador cargado');
+                    break;
+                    
+                case 'musical':
+                    // Módulo musical (futuro)
+                    console.log('🎼 Módulo Musical pendiente de implementación');
+                    break;
+                    
+                case 'visualizer':
+                    // El visualizador ya está en el HTML principal
+                    break;
+            }
+            
+        } catch (error) {
+            console.error(`❌ Error cargando módulo ${moduleName}:`, error);
+            
+            // Mostrar error en el contenedor del módulo
+            const moduleContainer = document.getElementById(`${moduleName}-module`);
+            moduleContainer.innerHTML = `
+                <div class="module-header">
+                    <h2>❌ Error cargando módulo</h2>
+                </div>
+                <div class="placeholder">
+                    <div class="placeholder-icon">⚠️</div>
+                    <p>Error: ${error.message}</p>
+                    <button class="btn secondary" onclick="window.app.retryLoadModule('${moduleName}')">
+                        🔄 Reintentar
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    async retryLoadModule(moduleName) {
+        AppState.loadedModules.delete(moduleName);
+        await this.switchModule(moduleName);
+    }
+
+    initializeModule(moduleName) {
+        switch (moduleName) {
+            case 'visualizer':
+                // El visualizador ya está inicializado
+                break;
+                
+            case 'combiner':
+                // Inicializar el módulo combinador
+                if (window.CombinerModule && typeof window.CombinerModule.init === 'function') {
+                    console.log('🔗 Inicializando Módulo Combinador...');
+                    window.CombinerModule.init();
+                } else {
+                    console.warn('⚠️ CombinerModule no disponible');
+                }
+                break;
+                
+            case 'musical':
+                // Módulo musical (pendiente de implementación)
+                console.log('🎼 Módulo Musical aún no implementado');
+                break;
+        }
     }
 
     setupAuthEventListener() {
@@ -133,13 +240,12 @@ class MusicPDFManager {
                     this.handleTokenExpired();
                 }
             }
-        }, 300000); // ← REDUCIDO: Cada 5 minutos
+        }, 300000); // Cada 5 minutos
     }
 
     handleTokenExpired() {
         console.log('⏰ Token expirado, intentando renovación automática...');
         
-        // ← NUEVO: Intentar renovación automática antes de desconectar
         if (this.driveAPI.driveAuth.refreshTokenSilently) {
             this.driveAPI.driveAuth.refreshTokenSilently()
                 .then(success => {
@@ -168,21 +274,6 @@ class MusicPDFManager {
         }
     }
 
-    switchModule(moduleName) {
-        AppState.currentModule = moduleName;
-
-        document.querySelectorAll('.nav-tab').forEach(tab => {
-            tab.classList.remove('active');
-        });
-        document.querySelector(`[data-module="${moduleName}"]`).classList.add('active');
-
-        document.querySelectorAll('.module').forEach(module => {
-            module.classList.remove('active');
-        });
-        document.getElementById(`${moduleName}-module`).classList.add('active');
-    }
-
-    // ← MODIFICADO: Cargar TODOS los archivos
     async loadAllFiles() {
         if (AppState.isLoadingFiles) return;
 
@@ -196,7 +287,6 @@ class MusicPDFManager {
                 throw new Error('No hay sesión válida de Google Drive');
             }
             
-            // ← NUEVO: Carga paralela con progreso
             const loadPromises = [
                 this.loadFilesWithProgress('instrumentos'),
                 this.loadFilesWithProgress('voces')
@@ -213,7 +303,12 @@ class MusicPDFManager {
             this.updateFileCounts();
             this.updateUI('files-loaded');
 
-            // ← NUEVO: Log de estadísticas
+            // Actualizar el módulo combinador si está activo
+            if (AppState.currentModule === 'combiner' && window.CombinerModule) {
+                console.log('🔗 Actualizando archivos en Módulo Combinador...');
+                window.CombinerModule.init();
+            }
+
             console.log(`✅ CARGA COMPLETA: ${instrumentosFiles.length} instrumentos + ${vocesFiles.length} voces = ${instrumentosFiles.length + vocesFiles.length} archivos totales`);
 
         } catch (error) {
@@ -225,7 +320,6 @@ class MusicPDFManager {
         }
     }
 
-    // ← NUEVO: Carga con progreso visual
     async loadFilesWithProgress(folderType) {
         try {
             AppState.loadingProgress[folderType].status = 'loading';
@@ -249,7 +343,6 @@ class MusicPDFManager {
         }
     }
 
-    // ← NUEVO: Actualizar progreso visual
     updateLoadingProgress(folderType, message) {
         const countElement = document.getElementById(`${folderType}-count`);
         if (countElement) {
@@ -534,13 +627,11 @@ class MusicPDFManager {
         }
     }
 
-    // ← MODIFICADO: Reintentar carga completa
     async retryLoadFiles() {
         if (!AppState.isAuthenticated) {
             await this.retryConnection();
         } else {
             AppState.isLoadingFiles = false;
-            // ← LIMPIAR progreso anterior
             AppState.loadingProgress = {
                 instrumentos: { current: 0, total: 0, status: 'waiting' },
                 voces: { current: 0, total: 0, status: 'waiting' }
@@ -655,7 +746,6 @@ class MusicPDFManager {
         }
     }
 
-    // ← NUEVO: Obtener estadísticas de carga
     getLoadingStats() {
         const totalFiles = AppState.files.instrumentos.length + AppState.files.voces.length;
         const loadedSections = Object.values(AppState.loadingProgress)
@@ -669,20 +759,18 @@ class MusicPDFManager {
             },
             loadingProgress: AppState.loadingProgress,
             completedSections: loadedSections,
-            isFullyLoaded: loadedSections === 2
+            isFullyLoaded: loadedSections === 2,
+            loadedModules: Array.from(AppState.loadedModules)
         };
     }
 
-    // ← NUEVO: Forzar recarga completa
     async forceFullReload() {
         console.log('🔄 Forzando recarga completa...');
         
-        // Limpiar cache si existe
         if (window.clearAppCache) {
             window.clearAppCache();
         }
         
-        // Reset estado
         AppState.files = { instrumentos: [], voces: [] };
         AppState.filteredFiles = { instrumentos: [], voces: [] };
         AppState.isLoadingFiles = false;
@@ -691,7 +779,6 @@ class MusicPDFManager {
             voces: { current: 0, total: 0, status: 'waiting' }
         };
         
-        // Recargar
         await this.loadAllFiles();
     }
 }
@@ -707,6 +794,7 @@ document.addEventListener('DOMContentLoaded', () => {
         { name: 'SearchUtils', obj: typeof SearchUtils !== 'undefined' },
         { name: 'SearchManager', obj: typeof SearchManager !== 'undefined' },
         { name: 'PDFViewer', obj: typeof PDFViewer !== 'undefined' },
+        { name: 'CombinerModule', obj: typeof CombinerModule !== 'undefined' },
         { name: 'Google Identity', obj: typeof google !== 'undefined' && google.accounts }
     ];
 
@@ -736,7 +824,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
     }
 
-    console.log('🚀 Iniciando aplicación OPTIMIZADA...');
+    console.log('🚀 Iniciando aplicación OPTIMIZADA con Carga Dinámica de Módulos...');
     window.app = new MusicPDFManager();
 });
 
@@ -756,6 +844,8 @@ window.debugAppState = function() {
     });
     
     console.log('📊 Estado de carga:', AppState.loadingProgress);
+    console.log('📊 Módulo actual:', AppState.currentModule);
+    console.log('📊 Módulos cargados:', Array.from(AppState.loadedModules));
     
     console.log('📊 Auth:', {
         isAuthenticated: AppState.isAuthenticated,
@@ -765,6 +855,11 @@ window.debugAppState = function() {
     
     if (AppState.driveAPI) {
         console.log('🔐 Estado de conexión:', AppState.driveAPI.driveAuth?.getConnectionStatus());
+    }
+
+    // Debug del módulo combinador
+    if (window.CombinerModule && typeof window.CombinerModule.getState === 'function') {
+        console.log('🔗 Estado Combinador:', window.CombinerModule.getState());
     }
     
     console.groupEnd();
@@ -808,4 +903,30 @@ window.clearAppCache = function() {
     console.log('✅ Cache limpiado (tokens de auth conservados)');
 };
 
-console.log('🎵 Main App cargada: MODO OPTIMIZADO - SIN LÍMITES + AUTH PERMANENTE');
+// === FUNCIÓN PARA TESTEAR EL MÓDULO COMBINADOR ===
+window.testCombinerModule = function() {
+    console.group('🔗 TEST MÓDULO COMBINADOR');
+    
+    if (typeof CombinerModule === 'undefined') {
+        console.error('❌ CombinerModule no está cargado');
+        return;
+    }
+    
+    console.log('✅ CombinerModule disponible');
+    console.log('📊 Estado actual:', window.CombinerModule.getState());
+    
+    // Cambiar al módulo combinador
+    if (window.app && AppState.currentModule !== 'combiner') {
+        console.log('🔄 Cambiando al módulo combinador...');
+        window.app.switchModule('combiner');
+    }
+    
+    // Verificar archivos disponibles
+    const state = window.CombinerModule.getState();
+    const totalFiles = state.availableFiles.instrumentos.length + state.availableFiles.voces.length;
+    console.log(`📁 Archivos disponibles: ${totalFiles} (${state.availableFiles.instrumentos.length} instrumentos + ${state.availableFiles.voces.length} voces)`);
+    
+    console.groupEnd();
+};
+
+console.log('🎵 Main App cargada: MODO OPTIMIZADO - CARGA DINÁMICA DE MÓDULOS');

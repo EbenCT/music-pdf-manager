@@ -8,9 +8,10 @@
     <!-- CSS -->
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/modules.css">
+    <link rel="stylesheet" href="css/combiner.css">
     <link rel="stylesheet" href="css/responsive.css">
     
-    <!-- META TAGS PARA GOOGLE Identity Services - CSP CORREGIDA -->
+    <!-- META TAGS PARA GOOGLE Identity Services -->
     <meta http-equiv="Content-Security-Policy" content="
         default-src 'self'; 
         script-src 'self' 'unsafe-inline' 'unsafe-eval' 
@@ -47,7 +48,7 @@
     <link rel="preconnect" href="https://drive.google.com" crossorigin>
     <link rel="dns-prefetch" href="https://www.gstatic.com">
     
-    <!-- Google Identity Services (GIS) - NUEVA API -->
+    <!-- Google Identity Services -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     
     <!-- PDF.js -->
@@ -55,80 +56,6 @@
     
     <!-- Estilos adicionales para autenticación -->
     <style>
-        /* === CONNECTION STATUS PANEL === */
-        .connection-status {
-            background: linear-gradient(135deg, var(--dark-gray), var(--medium-gray));
-            border: 2px solid var(--border-gray);
-            border-radius: var(--radius-lg);
-            margin-bottom: var(--spacing-xl);
-            overflow: hidden;
-            box-shadow: var(--shadow-md);
-            transition: all var(--transition-normal);
-        }
-
-        .connection-status.hidden {
-            display: none;
-        }
-
-        .status-content {
-            padding: var(--spacing-lg);
-            display: flex;
-            align-items: center;
-            gap: var(--spacing-lg);
-            flex-wrap: wrap;
-        }
-
-        .status-icon {
-            font-size: 2.5rem;
-            opacity: 0.8;
-            animation: pulse 2s infinite;
-        }
-
-        .status-info {
-            flex: 1;
-            min-width: 200px;
-        }
-
-        .status-info h3 {
-            color: var(--text-primary);
-            font-size: 1.2rem;
-            font-weight: 600;
-            margin-bottom: var(--spacing-xs);
-        }
-
-        .status-info p {
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            line-height: 1.4;
-        }
-
-        .status-actions {
-            display: flex;
-            gap: var(--spacing-sm);
-            flex-wrap: wrap;
-        }
-
-        /* === AUTH BUTTON === */
-        .btn#auth-button {
-            background: linear-gradient(135deg, #4285f4, #34a853);
-            color: var(--white);
-            border: none;
-            font-weight: 600;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .btn#auth-button:hover {
-            background: linear-gradient(135deg, #3367d6, #2d9a47);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 0.8; transform: scale(1); }
-            50% { opacity: 1; transform: scale(1.05); }
-        }
-
-        /* === AUTH STATUS === */
         .auth-status {
             display: inline-flex;
             align-items: center;
@@ -293,7 +220,7 @@
         </div>
     </div>
 
-    <!-- Scripts en ORDEN CORRECTO - CRÍTICO -->
+    <!-- Scripts en ORDEN CORRECTO -->
     <script>
         // Verificar que Google Identity Services se cargó
         console.log('🔍 Verificando Google Identity Services...');
@@ -325,6 +252,7 @@
     <script src="js/pdf-viewer.js"></script>
     <script src="js/search-utils.js"></script>
     <script src="js/search.js"></script>
+    <script src="js/combiner.js"></script>
     <script src="js/main.js"></script>
     
     <script>
@@ -339,6 +267,7 @@
             console.log('📊 PDFViewer:', typeof PDFViewer !== 'undefined' ? '✅' : '❌');
             console.log('📊 SearchUtils:', typeof SearchUtils !== 'undefined' ? '✅' : '❌');
             console.log('📊 SearchManager:', typeof SearchManager !== 'undefined' ? '✅' : '❌');
+            console.log('📊 CombinerModule:', typeof CombinerModule !== 'undefined' ? '✅' : '❌');
             console.log('📊 Google Identity:', typeof google !== 'undefined' && google.accounts ? '✅' : '❌');
         });
     </script>
