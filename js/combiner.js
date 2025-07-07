@@ -494,99 +494,101 @@ class PDFCombiner {
         return 'low';
     }
 
-    renderSearchResults() {
-        const container = document.getElementById('search-results');
-        const countElement = document.getElementById('matches-count');
-        
-        if (!container) return;
-        
-        const confirmedInstrumentos = this.state.searchResults.filter(r => r.instrumentos.confirmed).length;
-        const confirmedVoces = this.state.searchResults.filter(r => r.voces.confirmed).length;
-        
-        if (countElement) {
-            countElement.textContent = `🎸${confirmedInstrumentos} | 🎤${confirmedVoces} de ${this.state.searchResults.length}`;
-        }
-
-        if (this.state.searchResults.length === 0) {
-            container.innerHTML = `
-                <div class="placeholder">
-                    <div class="placeholder-icon">🤖</div>
-                    <p>Escribe los nombres de las canciones arriba</p>
-                    <p style="font-size: 0.9rem; color: var(--text-muted);">El sistema buscará automáticamente</p>
-                </div>
-            `;
-            return;
-        }
-
-        container.innerHTML = this.state.searchResults.map((result, index) => {
-            return `
-                <div class="search-result-item dual-section">
-                    <div class="search-term-header">
-                        <h4>"${result.searchTerm}" (${result.order})</h4>
-                    </div>
-                    
-                    <!-- Sección Instrumentos -->
-                    <div class="section-result">
-                        <div class="section-label">🎸 Instrumentos</div>
-                        ${this.renderSectionResult(result.instrumentos, index, 'instrumentos')}
-                    </div>
-                    
-                    <!-- Sección Voces -->
-                    <div class="section-result">
-                        <div class="section-label">🎤 Voces</div>
-                        ${this.renderSectionResult(result.voces, index, 'voces')}
-                    </div>
-                </div>
-            `;
-        }).join('');
+renderSearchResults() {
+    const container = document.getElementById('search-results');
+    const countElement = document.getElementById('matches-count');
+    
+    if (!container) return;
+    
+    const confirmedInstrumentos = this.state.searchResults.filter(r => r.instrumentos.confirmed).length;
+    const confirmedVoces = this.state.searchResults.filter(r => r.voces.confirmed).length;
+    
+    if (countElement) {
+        countElement.textContent = `🎸${confirmedInstrumentos} | 🎤${confirmedVoces} de ${this.state.searchResults.length}`;
     }
 
-    renderSectionResult(sectionData, resultIndex, sectionType) {
-        if (sectionData.matches.length === 0) {
-            return `
-                <div class="no-matches">
-                    <div class="similarity-score low">0%</div>
-                    <div class="file-info">
-                        <div class="match-status" style="color: var(--accent-red);">
-                            ❌ Sin coincidencias encontradas
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
+    if (this.state.searchResults.length === 0) {
+        container.innerHTML = `
+            <div class="placeholder">
+                <div class="placeholder-icon">🤖</div>
+                <p>Escribe los nombres de las canciones arriba</p>
+                <p style="font-size: 0.9rem; color: var(--text-muted);">El sistema buscará automáticamente</p>
+            </div>
+        `;
+        return;
+    }
 
-        const bestMatch = sectionData.selectedMatch;
-        const similarityPercent = Math.round(bestMatch.similarity * 100);
-        
+    // CORREGIDO: Renderizar cada resultado individualmente
+    container.innerHTML = this.state.searchResults.map((result, index) => {
         return `
-            <div class="section-match">
-                <div class="similarity-score ${bestMatch.matchType}">${similarityPercent}%</div>
-                <div class="file-info" style="flex: 1;">
-                    <div class="file-name">${bestMatch.name}</div>
-                    <div class="match-status ${sectionData.confirmed ? 'confirmed' : 'suggested'}">
-                        ${sectionData.confirmed ? '✅ Confirmado automáticamente' : '⚠️ Requiere confirmación'}
-                        • ${bestMatch.size}
-                    </div>
-                    ${sectionData.matches.length > 1 ? `
-                        <select class="alternative-select" onchange="CombinerModule.selectAlternativeMatch(${resultIndex}, '${sectionType}', this.value)">
-                            ${sectionData.matches.map((match, matchIndex) => `
-                                <option value="${matchIndex}" ${matchIndex === 0 ? 'selected' : ''}>
-                                    ${match.name} (${Math.round(match.similarity * 100)}%)
-                                </option>
-                            `).join('')}
-                        </select>
-                    ` : ''}
+            <div class="search-result-item" style="margin-bottom: var(--spacing-lg); background: var(--dark-gray); border-radius: var(--radius-md); padding: var(--spacing-md);">
+                <div style="background: var(--medium-gray); padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--radius-sm); text-align: center; margin-bottom: var(--spacing-md); border-bottom: 2px solid var(--accent-red);">
+                    <h4 style="color: var(--text-primary); margin: 0; font-size: 1rem; font-weight: 600;">"${result.searchTerm}" (${result.order})</h4>
                 </div>
-                <div>
-                    <button 
-                        class="btn confirm-btn ${sectionData.confirmed ? 'secondary' : ''}" 
-                        onclick="CombinerModule.toggleSectionConfirmation(${resultIndex}, '${sectionType}')">
-                        ${sectionData.confirmed ? '✅' : '❓'}
-                    </button>
+                
+                <!-- Sección Instrumentos -->
+                <div style="background: var(--secondary-black); border-radius: var(--radius-md); padding: var(--spacing-md); border: 1px solid var(--border-gray); margin-bottom: var(--spacing-sm);">
+                    <div style="color: var(--accent-red); font-weight: 600; margin-bottom: var(--spacing-sm); font-size: 0.9rem;">🎸 Instrumentos</div>
+                    ${this.renderSectionResult(result.instrumentos, index, 'instrumentos')}
+                </div>
+                
+                <!-- Sección Voces -->
+                <div style="background: var(--secondary-black); border-radius: var(--radius-md); padding: var(--spacing-md); border: 1px solid var(--border-gray);">
+                    <div style="color: var(--accent-red); font-weight: 600; margin-bottom: var(--spacing-sm); font-size: 0.9rem;">🎤 Voces</div>
+                    ${this.renderSectionResult(result.voces, index, 'voces')}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+renderSectionResult(sectionData, resultIndex, sectionType) {
+    if (sectionData.matches.length === 0) {
+        return `
+            <div style="display: flex; align-items: center; gap: var(--spacing-sm); opacity: 0.7;">
+                <div class="similarity-score low">0%</div>
+                <div style="flex: 1;">
+                    <div style="color: var(--accent-red);">
+                        ❌ Sin coincidencias encontradas
+                    </div>
                 </div>
             </div>
         `;
     }
+
+    const bestMatch = sectionData.selectedMatch;
+    const similarityPercent = Math.round(bestMatch.similarity * 100);
+    
+    return `
+        <div style="display: flex; align-items: flex-start; gap: var(--spacing-sm);">
+            <div class="similarity-score ${bestMatch.matchType}">${similarityPercent}%</div>
+            <div style="flex: 1;">
+                <div class="file-name" style="color: var(--text-primary); font-weight: 500; margin-bottom: var(--spacing-xs);">${bestMatch.name}</div>
+                <div class="match-status ${sectionData.confirmed ? 'confirmed' : 'suggested'}" style="font-size: 0.8rem; margin-top: var(--spacing-xs);">
+                    ${sectionData.confirmed ? '✅ Confirmado automáticamente' : '⚠️ Requiere confirmación'}
+                    • ${bestMatch.size}
+                </div>
+                ${sectionData.matches.length > 1 ? `
+                    <select class="alternative-select" onchange="CombinerModule.selectAlternativeMatch(${resultIndex}, '${sectionType}', this.value)" style="background: var(--dark-gray); color: var(--text-primary); border: 1px solid var(--border-gray); padding: var(--spacing-xs); border-radius: var(--radius-sm); margin-top: var(--spacing-xs); width: 100%; font-size: 0.8rem;">
+                        ${sectionData.matches.map((match, matchIndex) => `
+                            <option value="${matchIndex}" ${matchIndex === 0 ? 'selected' : ''}>
+                                ${match.name} (${Math.round(match.similarity * 100)}%)
+                            </option>
+                        `).join('')}
+                    </select>
+                ` : ''}
+            </div>
+            <div>
+                <button 
+                    class="btn confirm-btn ${sectionData.confirmed ? 'secondary' : ''}" 
+                    onclick="CombinerModule.toggleSectionConfirmation(${resultIndex}, '${sectionType}')"
+                    style="padding: var(--spacing-xs) var(--spacing-sm); font-size: 0.8rem; min-width: 60px;">
+                    ${sectionData.confirmed ? '✅' : '❓'}
+                </button>
+            </div>
+        </div>
+    `;
+}
 
     selectAlternativeMatch(resultIndex, sectionType, matchIndex) {
         const result = this.state.searchResults[resultIndex];
