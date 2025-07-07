@@ -569,21 +569,222 @@ class PDFCombiner {
         this.closePreview();
         
         try {
-            // Mostrar progreso
-            this.showProcessingModal(filesToCombine);
+            // Verificar si RealPDFCombiner está disponible
+            if (!window.RealPDFCombiner) {
+                throw new Error('Combinador real de PDFs no está disponible');
+            }
+
+            // Verificar compatibilidad del navegador
+            if (!window.RealPDFCombiner.isCompatible()) {
+                throw new Error('Tu navegador no es compatible con la combinación de PDFs');
+            }
+
+            // Estimar tamaño y verificar memoria
+            const estimatedSize = window.RealPDFCombiner.estimateCombinedSize(filesToCombine);
+            const memoryCheck = window.RealPDFCombiner.checkMemoryAvailability(estimatedSize);
             
-            // Simular procesamiento
-            await this.simulatePDFCombination(filesToCombine);
+            if (!memoryCheck.canProceed) {
+                throw new Error(memoryCheck.warning);
+            }
+
+            if (memoryCheck.warning) {
+                console.warn('⚠️', memoryCheck.warning);
+            }
+
+            // Mostrar progreso real
+            this.showRealProcessingModal(filesToCombine);
             
-            // Éxito
-            this.showSuccessModal(filesToCombine);
+            // ¡COMBINACIÓN REAL!
+            const combinedPDFBlob = await window.RealPDFCombiner.combineFiles(
+                filesToCombine,
+                (current, total, message) => {
+                    this.updateRealProgress(current, total, message);
+                }
+            );
+            
+            // Éxito - mostrar modal de descarga
+            this.showSuccessModalWithRealPDF(filesToCombine, combinedPDFBlob);
             
         } catch (error) {
-            console.error('Error combinando PDFs:', error);
-            this.showError('Error al combinar los archivos PDF');
+            console.error('❌ Error combinando PDFs:', error);
+            this.showRealError(`Error al combinar PDFs: ${error.message}`);
         } finally {
             this.state.isProcessing = false;
         }
+    }
+
+    showRealProcessingModal(files) {
+        const modal = document.createElement('div');
+        modal.className = 'loading-overlay show';
+        modal.id = 'real-processing-modal';
+        modal.innerHTML = `
+            <div class="loading-spinner">
+                <h3>🔄 Combinando PDFs Realmente</h3>
+                <div class="spinner"></div>
+                <div id="real-progress-container" style="margin: var(--spacing-lg) 0; width: 300px;">
+                    <div style="background: var(--dark-gray); border-radius: var(--radius-md); padding: 4px;">
+                        <div id="real-progress-bar" style="
+                            background: var(--accent-red); 
+                            height: 20px; 
+                            border-radius: var(--radius-sm); 
+                            width: 0%; 
+                            transition: width 0.3s ease;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            color: white;
+                            font-size: 0.8rem;
+                            font-weight: 600;
+                        ">0%</div>
+                    </div>
+                </div>
+                <p id="real-processing-message">Preparando combinación de ${files.length} archivos...</p>
+                <div style="margin-top: var(--spacing-md); color: var(--text-muted); font-size: 0.9rem;">
+                    <div>📄 Total de archivos: ${files.length}</div>
+                    <div>💾 Tamaño estimado: ${this.formatBytes(window.RealPDFCombiner.estimateCombinedSize(files))}</div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    updateRealProgress(current, total, message) {
+        const progressBar = document.getElementById('real-progress-bar');
+        const progressMessage = document.getElementById('real-processing-message');
+        
+        if (progressBar && progressMessage) {
+            const percentage = Math.round((current / total) * 100);
+            progressBar.style.width = `${percentage}%`;
+            progressBar.textContent = `${percentage}%`;
+            progressMessage.textContent = message;
+        }
+    }
+
+    showSuccessModalWithRealPDF(files, pdfBlob) {
+        const processingModal = document.getElementById('real-processing-modal');
+        if (processingModal) {
+            processingModal.remove();
+        }
+        
+        const fileSizeMB = (pdfBlob.size / 1024 / 1024).toFixed(2);
+        const timestamp = new Date().toLocaleString('es-ES');
+        
+        const modal = document.createElement('div');
+        modal.className = 'loading-overlay show';
+        modal.innerHTML = `
+            <div class="loading-spinner">
+                <h3>✅ PDF Combinado Exitosamente</h3>
+                <div style="font-size: 4rem; margin: var(--spacing-lg) 0;">📄</div>
+                
+                <div style="background: var(--dark-gray); padding: var(--spacing-lg); border-radius: var(--radius-md); margin: var(--spacing-lg) 0;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); text-align: left;">
+                        <div><strong>Archivos combinados:</strong> ${files.length}</div>
+                        <div><strong>Tamaño final:</strong> ${fileSizeMB} MB</div>
+                        <div><strong>Fecha:</strong> ${timestamp}</div>
+                        <div><strong>Páginas:</strong> Múltiples</div>
+                    </div>
+                </div>
+                
+                <div style="margin: var(--spacing-md) 0; padding: var(--spacing-md); background: var(--accent-red-light); border-radius: var(--radius-md);">
+                    <p style="color: var(--accent-red); font-weight: 600; margin: 0;">
+                        🎉 ¡Tu PDF combinado está listo para descargar!
+                    </p>
+                </div>
+                
+                <div style="display: flex; gap: var(--spacing-md); justify-content: center; margin-top: var(--spacing-lg);">
+                    <button class="btn secondary" onclick="this.closest('.loading-overlay').remove()">
+                        ✨ Cerrar
+                    </button>
+                    <button class="btn" onclick="CombinerModule.downloadRealPDF(); this.closest('.loading-overlay').remove();">
+                        📥 Descargar PDF (${fileSizeMB} MB)
+                    </button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        // Guardar referencia del blob para descarga
+        this.lastCombinedPDF = pdfBlob;
+    }
+
+    downloadRealPDF() {
+        if (this.lastCombinedPDF) {
+            try {
+                const filename = this.generatePDFFilename();
+                window.RealPDFCombiner.downloadCombinedPDF(this.lastCombinedPDF, filename);
+                this.showSuccess('¡PDF descargado exitosamente!');
+                
+                // Limpiar referencia
+                this.lastCombinedPDF = null;
+                
+            } catch (error) {
+                console.error('❌ Error descargando PDF:', error);
+                this.showError('Error al descargar el PDF');
+            }
+        } else {
+            this.showError('No hay PDF para descargar');
+        }
+    }
+
+    generatePDFFilename() {
+        const mode = this.state.currentMode;
+        const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+        
+        if (mode === 'manual') {
+            const count = this.state.selectedFiles.length;
+            return `PDFs_Combinados_Manual_${count}archivos_${timestamp}.pdf`;
+        } else {
+            const confirmedCount = this.state.searchResults.filter(r => r.confirmed).length;
+            return `PDFs_Combinados_Auto_${confirmedCount}archivos_${timestamp}.pdf`;
+        }
+    }
+
+    formatBytes(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    showRealError(message) {
+        const processingModal = document.getElementById('real-processing-modal');
+        if (processingModal) {
+            processingModal.remove();
+        }
+        
+        const modal = document.createElement('div');
+        modal.className = 'loading-overlay show';
+        modal.innerHTML = `
+            <div class="loading-spinner">
+                <h3>❌ Error en Combinación</h3>
+                <div style="font-size: 3rem; margin: var(--spacing-lg) 0; color: var(--accent-red);">⚠️</div>
+                <div style="background: var(--dark-gray); padding: var(--spacing-lg); border-radius: var(--radius-md); margin: var(--spacing-lg) 0;">
+                    <p style="color: var(--text-primary); margin-bottom: var(--spacing-md);"><strong>Detalles del error:</strong></p>
+                    <p style="color: var(--accent-red); font-family: monospace; font-size: 0.9rem;">${message}</p>
+                </div>
+                
+                <div style="background: var(--medium-gray); padding: var(--spacing-md); border-radius: var(--radius-md); margin: var(--spacing-lg) 0;">
+                    <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 0;">
+                        💡 <strong>Posibles soluciones:</strong><br>
+                        • Verificar que todos los archivos sean PDFs válidos<br>
+                        • Reducir el número de archivos a combinar<br>
+                        • Verificar la conexión a Google Drive<br>
+                        • Intentar con archivos más pequeños
+                    </p>
+                </div>
+                
+                <div style="display: flex; gap: var(--spacing-md); justify-content: center; margin-top: var(--spacing-lg);">
+                    <button class="btn secondary" onclick="this.closest('.loading-overlay').remove()">
+                        ❌ Cerrar
+                    </button>
+                    <button class="btn" onclick="this.closest('.loading-overlay').remove(); CombinerModule.showPreview();">
+                        🔄 Intentar de Nuevo
+                    </button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
     }
 
     showProcessingModal(files) {
@@ -695,6 +896,7 @@ window.CombinerModule = {
     combineFiles: () => CombinerModule.combineFiles(),
     confirmCombination: () => CombinerModule.confirmCombination(),
     downloadCombinedPDF: () => CombinerModule.downloadCombinedPDF(),
+    downloadRealPDF: () => CombinerModule.downloadRealPDF(), // ← NUEVO
     clearAll: () => CombinerModule.clearAll(),
     init: () => CombinerModule.init(),
     getState: () => CombinerModule.state
