@@ -726,31 +726,116 @@ renderSectionResultSafe(sectionData, resultIndex, sectionType) {
     `;
 }
 
-// AGREGAR función de debugging
+// FUNCIÓN DE DEBUG MEJORADA - Agregar en js/combiner.js
 debugSearchResults() {
-    console.group('🔍 DEBUG SEARCH RESULTS');
-    console.log('Número de resultados:', this.state.searchResults.length);
-    console.log('Elemento container:', document.getElementById('search-results'));
-    console.log('Elemento contador:', document.getElementById('matches-count'));
+    console.group('🔍 DEBUG SEARCH RESULTS - COMPLETO');
     
-    this.state.searchResults.forEach((result, index) => {
-        console.log(`Resultado ${index + 1}:`, {
-            searchTerm: result.searchTerm,
-            instrumentos: {
-                matches: result.instrumentos.matches.length,
-                confirmed: result.instrumentos.confirmed,
-                selectedMatch: result.instrumentos.selectedMatch?.name
-            },
-            voces: {
-                matches: result.voces.matches.length,
-                confirmed: result.voces.confirmed,
-                selectedMatch: result.voces.selectedMatch?.name
-            }
-        });
+    // Estado general
+    console.log('Estado actual:', {
+        currentMode: this.state.currentMode,
+        searchResultsLength: this.state.searchResults.length,
+        isProcessing: this.state.isProcessing
     });
+    
+    // Verificar elementos DOM
+    const container = document.getElementById('search-results');
+    const countElement = document.getElementById('matches-count');
+    
+    console.log('Elementos DOM:', {
+        searchResultsContainer: !!container,
+        matchesCountElement: !!countElement,
+        containerHTML: container ? container.innerHTML.substring(0, 100) + '...' : 'N/A'
+    });
+    
+    // Archivos disponibles
+    console.log('Archivos disponibles:', {
+        instrumentos: this.state.availableFiles.instrumentos.length,
+        voces: this.state.availableFiles.voces.length
+    });
+    
+    // Detalles de cada resultado de búsqueda
+    if (this.state.searchResults.length > 0) {
+        console.log('Detalles de resultados:');
+        this.state.searchResults.forEach((result, index) => {
+            console.log(`Resultado ${index + 1}:`, {
+                searchTerm: result.searchTerm,
+                order: result.order,
+                instrumentos: {
+                    matches: result.instrumentos.matches.length,
+                    confirmed: result.instrumentos.confirmed,
+                    selectedMatch: result.instrumentos.selectedMatch?.name || 'Ninguno',
+                    bestSimilarity: result.instrumentos.selectedMatch?.similarity || 0
+                },
+                voces: {
+                    matches: result.voces.matches.length,
+                    confirmed: result.voces.confirmed,
+                    selectedMatch: result.voces.selectedMatch?.name || 'Ninguno',
+                    bestSimilarity: result.voces.selectedMatch?.similarity || 0
+                }
+            });
+        });
+    } else {
+        console.log('⚠️ No hay resultados de búsqueda');
+    }
+    
+    // Verificar si hay errores en el textarea
+    const textarea = document.getElementById('song-list-textarea');
+    if (textarea) {
+        const songNames = textarea.value.split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0 && !line.startsWith('#'));
+        console.log('Textarea datos:', {
+            rawValue: textarea.value.substring(0, 100) + '...',
+            processedSongs: songNames,
+            songCount: songNames.length
+        });
+    }
+    
+    // Test manual de similitud
+    if (this.state.searchResults.length > 0) {
+        const testResult = this.state.searchResults[0];
+        console.log('Test de similitud manual:', {
+            searchTerm: testResult.searchTerm,
+            testFile: this.state.availableFiles.instrumentos[0]?.name || 'N/A',
+            similarity: this.state.availableFiles.instrumentos[0] ? 
+                this.calculateSimilarity(testResult.searchTerm, this.state.availableFiles.instrumentos[0].name) : 'N/A'
+        });
+    }
+    
     console.groupEnd();
+    
+    // Intentar forzar re-render
+    console.log('🔄 Intentando forzar re-render...');
+    try {
+        this.renderSearchResults();
+        console.log('✅ Re-render exitoso');
+    } catch (error) {
+        console.error('❌ Error en re-render:', error);
+    }
 }
 
+// FUNCIÓN DE TEST RÁPIDO - Agregar en js/combiner.js
+quickTestAutomaticMode() {
+    console.log('🧪 Test rápido del modo automático');
+    
+    // Limpiar estado anterior
+    this.state.searchResults = [];
+    
+    // Agregar datos de test al textarea
+    const textarea = document.getElementById('song-list-textarea');
+    if (textarea) {
+        textarea.value = `Ahora es tiempo de alabar a Dios
+Vine a alabar a Dios
+Test canción inexistente`;
+        
+        // Ejecutar búsqueda
+        setTimeout(() => {
+            this.searchSongs();
+        }, 100);
+    } else {
+        console.error('❌ Textarea no encontrado');
+    }
+}
 renderSectionResult(sectionData, resultIndex, sectionType) {
     if (sectionData.matches.length === 0) {
         return `
@@ -1231,6 +1316,7 @@ window.CombinerModule = {
     clearAll: () => CombinerModule.clearAll(),
     init: () => CombinerModule.init(),
     debugSearchResults: () => CombinerModule.debugSearchResults(),
+    quickTestAutomaticMode: () => CombinerModule.quickTestAutomaticMode(),
     getState: () => CombinerModule.state
     
 };
