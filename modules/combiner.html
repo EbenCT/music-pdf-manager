@@ -1,4 +1,4 @@
-<!-- TEMPLATE DEL MÓDULO COMBINADOR -->
+<!-- TEMPLATE DEL MÓDULO COMBINADOR - MEJORADO -->
 <!-- Este archivo se carga dinámicamente cuando se activa el módulo -->
 
 <div class="module-header">
@@ -6,26 +6,49 @@
     <p>Combina múltiples archivos PDF en uno solo</p>
 </div>
 
-<!-- Pestañas de modo -->
-<div class="combiner-tabs">
-    <button class="combiner-tab active" data-tab="manual">
-        📋 Modo Manual
-    </button>
-    <button class="combiner-tab" data-tab="automatic">
-        🤖 Modo Automático
-    </button>
+<!-- SWITCH PRINCIPAL DE MODO -->
+<div class="mode-switch-container">
+    <div class="mode-switch">
+        <button class="mode-switch-btn active" data-mode="manual">
+            📋 Modo Manual
+        </button>
+        <button class="mode-switch-btn" data-mode="automatic">
+            🤖 Modo Automático
+        </button>
+    </div>
+    <div class="mode-description">
+        <span id="mode-description-text">Selecciona archivos uno por uno y reordénalos como desees</span>
+    </div>
 </div>
 
 <!-- MODO MANUAL -->
-<div id="manual-tab" class="tab-content active">
+<div id="manual-mode" class="mode-content active">
     <div class="combiner-grid">
-        <!-- Panel de selección de archivos -->
+        <!-- Panel de selección de archivos con switch de sección -->
         <div class="combiner-panel">
             <div class="panel-header">
                 <h3>📄 Archivos Disponibles</h3>
                 <button class="btn secondary small" onclick="CombinerModule.clearAllSelections()">
                     Limpiar Todo
                 </button>
+            </div>
+            
+            <!-- Switch de Sección (como en el módulo visualizador) -->
+            <div class="section-switch">
+                <button class="section-switch-btn active" data-section="instrumentos">
+                    🎸 Instrumentos
+                </button>
+                <button class="section-switch-btn" data-section="voces">
+                    🎤 Voces
+                </button>
+            </div>
+            
+            <!-- Lista dinámica según la sección seleccionada -->
+            <div class="section-info">
+                <div class="section-header-info">
+                    <h4 id="current-section-title-combiner">🎸 Instrumentos</h4>
+                    <span class="count" id="current-section-count-combiner">Cargando...</span>
+                </div>
             </div>
             
             <div class="file-list" id="available-files">
@@ -55,7 +78,7 @@
 </div>
 
 <!-- MODO AUTOMÁTICO -->
-<div id="automatic-tab" class="tab-content">
+<div id="automatic-mode" class="mode-content">
     <div class="combiner-grid">
         <!-- Panel de entrada de texto -->
         <div class="combiner-panel">

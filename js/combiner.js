@@ -1,12 +1,13 @@
 /**
- * MUSIC PDF MANAGER - COMBINER MODULE
- * Módulo para combinar múltiples PDFs en uno solo
+ * MUSIC PDF MANAGER - COMBINER MODULE - MEJORADO
+ * Módulo para combinar múltiples PDFs en uno solo con switch mejorado
  */
 
 class PDFCombiner {
     constructor() {
         this.state = {
             currentMode: 'manual',
+            currentSection: 'instrumentos', // Nueva propiedad para el modo manual
             availableFiles: { instrumentos: [], voces: [] },
             selectedFiles: [],
             searchResults: [],
@@ -21,13 +22,22 @@ class PDFCombiner {
         this.setupEventListeners();
         this.loadAvailableFiles();
         this.updateSimilarityDisplay();
+        this.updateModeDescription();
+        this.updateSectionDisplay(); // Nueva función
     }
 
     setupEventListeners() {
-        // Cambio de pestañas
-        document.querySelectorAll('.combiner-tab').forEach(tab => {
-            tab.addEventListener('click', (e) => {
-                this.switchTab(e.target.dataset.tab);
+        // Switch principal de modo
+        document.querySelectorAll('.mode-switch-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.switchMode(e.target.dataset.mode);
+            });
+        });
+
+        // Switch de sección (para modo manual)
+        document.querySelectorAll('.section-switch-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                this.switchSection(e.target.dataset.section);
             });
         });
 
@@ -49,76 +59,157 @@ class PDFCombiner {
         }
     }
 
-    switchTab(tabName) {
-        this.state.currentMode = tabName;
+    // === SWITCH DE MODO PRINCIPAL ===
+    switchMode(mode) {
+        if (this.state.currentMode === mode) return;
+        
+        this.state.currentMode = mode;
 
-        // Actualizar pestañas
-        document.querySelectorAll('.combiner-tab').forEach(tab => {
-            tab.classList.remove('active');
+        // Actualizar botones del switch principal
+        document.querySelectorAll('.mode-switch-btn').forEach(btn => {
+            btn.classList.remove('active');
         });
-        document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+        document.querySelector(`[data-mode="${mode}"]`).classList.add('active');
 
-        // Mostrar contenido correspondiente
-        document.querySelectorAll('.tab-content').forEach(content => {
+        // Mostrar/ocultar contenido correspondiente
+        document.querySelectorAll('.mode-content').forEach(content => {
             content.classList.remove('active');
         });
-        document.getElementById(`${tabName}-tab`).classList.add('active');
+        document.getElementById(`${mode}-mode`).classList.add('active');
 
+        this.updateModeDescription();
         this.updateActionButtons();
+        
+        // Si cambiamos a modo manual, actualizar la vista de archivos
+        if (mode === 'manual') {
+            this.renderAvailableFiles();
+        }
+        
+        console.log(`🔄 Cambiado a modo: ${mode}`);
+    }
+
+    updateModeDescription() {
+        const descriptions = {
+            manual: 'Selecciona archivos uno por uno y reordénalos como desees',
+            automatic: 'Proporciona una lista de nombres y el sistema buscará las mejores coincidencias'
+        };
+        
+        const element = document.getElementById('mode-description-text');
+        if (element) {
+            element.textContent = descriptions[this.state.currentMode] || '';
+        }
+    }
+
+    // === SWITCH DE SECCIÓN (Para modo manual) ===
+    switchSection(section) {
+        if (this.state.currentSection === section) return;
+        
+        this.state.currentSection = section;
+
+        // Actualizar botones del switch de sección
+        document.querySelectorAll('.section-switch-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelector(`[data-section="${section}"]`).classList.add('active');
+
+        this.updateSectionDisplay();
+        this.renderAvailableFiles();
+        
+        console.log(`📁 Cambiado a sección: ${section}`);
+    }
+
+    updateSectionDisplay() {
+        const title = document.getElementById('current-section-title-combiner');
+        const count = document.getElementById('current-section-count-combiner');
+        
+        if (title) {
+            title.textContent = this.state.currentSection === 'instrumentos' ? '🎸 Instrumentos' : '🎤 Voces';
+        }
+        
+        if (count) {
+            const files = this.state.availableFiles[this.state.currentSection] || [];
+            count.textContent = `${files.length} archivo${files.length !== 1 ? 's' : ''}`;
+        }
     }
 
     loadAvailableFiles() {
         if (window.AppState && window.AppState.files) {
             this.state.availableFiles = window.AppState.files;
+            console.log('✅ Archivos cargados desde AppState:', {
+                instrumentos: this.state.availableFiles.instrumentos.length,
+                voces: this.state.availableFiles.voces.length
+            });
         } else {
             // Datos de prueba para desarrollo
             this.state.availableFiles = {
                 instrumentos: [
-                    { id: '1', name: 'Ahora es tiempo de alabar a Dios.pdf', size: '245 KB' },
-                    { id: '2', name: 'Vine a alabar a Dios.pdf', size: '198 KB' },
-                    { id: '3', name: 'Magnifiquemos al Señor.pdf', size: '223 KB' },
-                    { id: '4', name: 'Esta es la confianza que tenemos en el.pdf', size: '267 KB' },
-                    { id: '5', name: 'Mas el Dios de toda gracias.pdf', size: '189 KB' }
+                    { id: '1', name: 'Ahora es tiempo de alabar a Dios.pdf', size: '245 KB', section: 'instrumentos' },
+                    { id: '2', name: 'Vine a alabar a Dios.pdf', size: '198 KB', section: 'instrumentos' },
+                    { id: '3', name: 'Magnifiquemos al Señor.pdf', size: '223 KB', section: 'instrumentos' },
+                    { id: '4', name: 'Esta es la confianza que tenemos en el.pdf', size: '267 KB', section: 'instrumentos' },
+                    { id: '5', name: 'Mas el Dios de toda gracias.pdf', size: '189 KB', section: 'instrumentos' }
                 ],
                 voces: [
-                    { id: '9', name: 'Amazing Grace - Himno Tradicional.pdf', size: '156 KB' },
-                    { id: '10', name: 'Ave María - Franz Schubert.pdf', size: '203 KB' },
-                    { id: '11', name: 'Hallelujah - Leonard Cohen.pdf', size: '287 KB' }
+                    { id: '9', name: 'Amazing Grace - Himno Tradicional.pdf', size: '156 KB', section: 'voces' },
+                    { id: '10', name: 'Ave María - Franz Schubert.pdf', size: '203 KB', section: 'voces' },
+                    { id: '11', name: 'Hallelujah - Leonard Cohen.pdf', size: '287 KB', section: 'voces' }
                 ]
             };
+            console.log('⚠️ Usando datos de prueba para desarrollo');
         }
 
         this.renderAvailableFiles();
+        this.updateSectionDisplay();
     }
 
     renderAvailableFiles() {
         const container = document.getElementById('available-files');
         if (!container) return;
 
-        const allFiles = [
-            ...this.state.availableFiles.instrumentos.map(f => ({...f, section: 'instrumentos'})),
-            ...this.state.availableFiles.voces.map(f => ({...f, section: 'voces'}))
-        ];
+        // Obtener archivos de la sección actual
+        const currentFiles = this.state.availableFiles[this.state.currentSection] || [];
 
-        if (allFiles.length === 0) {
+        if (currentFiles.length === 0) {
             container.innerHTML = `
                 <div class="placeholder">
                     <div class="placeholder-icon">📄</div>
-                    <p>No hay archivos disponibles</p>
+                    <p>No hay archivos en ${this.state.currentSection}</p>
+                    <p style="font-size: 0.9rem; color: var(--text-muted);">
+                        Verifica la conexión con Google Drive
+                    </p>
                 </div>
             `;
             return;
         }
 
-        container.innerHTML = allFiles.map(file => `
-            <div class="combiner-file-item" data-file-id="${file.id}" onclick="CombinerModule.toggleFileSelection('${file.id}')">
+        container.innerHTML = currentFiles.map(file => `
+            <div class="combiner-file-item" 
+                 data-file-id="${file.id}" 
+                 data-section="${this.state.currentSection}"
+                 onclick="CombinerModule.toggleFileSelection('${file.id}')">
                 <input type="checkbox" class="file-checkbox" id="check-${file.id}">
                 <div class="file-info">
                     <div class="file-name">${file.name}</div>
-                    <div class="file-meta">${file.section} • ${file.size}</div>
+                    <div class="file-meta">${this.state.currentSection} • ${file.size}</div>
                 </div>
             </div>
         `).join('');
+
+        // Marcar archivos ya seleccionados
+        this.updateSelectedStates();
+    }
+
+    updateSelectedStates() {
+        // Actualizar estados visuales de los archivos seleccionados
+        this.state.selectedFiles.forEach(selectedFile => {
+            const fileElement = document.querySelector(`[data-file-id="${selectedFile.id}"]`);
+            const checkbox = document.getElementById(`check-${selectedFile.id}`);
+            
+            if (fileElement && selectedFile.section === this.state.currentSection) {
+                fileElement.classList.add('selected');
+                if (checkbox) checkbox.checked = true;
+            }
+        });
     }
 
     // === MODO MANUAL ===
@@ -129,20 +220,18 @@ class PDFCombiner {
         if (this.state.selectedFiles.find(f => f.id === fileId)) {
             // Deseleccionar
             this.state.selectedFiles = this.state.selectedFiles.filter(f => f.id !== fileId);
-            fileElement.classList.remove('selected');
-            checkbox.checked = false;
+            if (fileElement) fileElement.classList.remove('selected');
+            if (checkbox) checkbox.checked = false;
         } else {
             // Seleccionar
-            const allFiles = [
-                ...this.state.availableFiles.instrumentos.map(f => ({...f, section: 'instrumentos'})),
-                ...this.state.availableFiles.voces.map(f => ({...f, section: 'voces'}))
-            ];
-            
-            const file = allFiles.find(f => f.id === fileId);
+            const file = this.state.availableFiles[this.state.currentSection].find(f => f.id === fileId);
             if (file) {
-                this.state.selectedFiles.push(file);
-                fileElement.classList.add('selected');
-                checkbox.checked = true;
+                this.state.selectedFiles.push({
+                    ...file,
+                    section: this.state.currentSection
+                });
+                if (fileElement) fileElement.classList.add('selected');
+                if (checkbox) checkbox.checked = true;
             }
         }
         
@@ -190,11 +279,12 @@ class PDFCombiner {
     removeSelectedFile(fileId) {
         this.state.selectedFiles = this.state.selectedFiles.filter(f => f.id !== fileId);
         
-        // Actualizar UI
-        const fileElement = document.querySelector(`[data-file-id="${fileId}"]`);
-        const checkbox = document.getElementById(`check-${fileId}`);
+        // Actualizar UI en todas las vistas
+        document.querySelectorAll(`[data-file-id="${fileId}"]`).forEach(element => {
+            element.classList.remove('selected');
+        });
         
-        if (fileElement) fileElement.classList.remove('selected');
+        const checkbox = document.getElementById(`check-${fileId}`);
         if (checkbox) checkbox.checked = false;
         
         this.updateSelectedFilesList();
@@ -204,12 +294,11 @@ class PDFCombiner {
     clearAllSelections() {
         this.state.selectedFiles = [];
         
-        // Limpiar checkboxes
+        // Limpiar checkboxes y clases
         document.querySelectorAll('.file-checkbox').forEach(checkbox => {
             checkbox.checked = false;
         });
         
-        // Limpiar clases selected
         document.querySelectorAll('.combiner-file-item').forEach(item => {
             item.classList.remove('selected');
         });
@@ -235,6 +324,7 @@ class PDFCombiner {
         console.log('🔍 Buscando canciones:', songNames);
         this.state.searchResults = [];
 
+        // Combinar archivos de ambas secciones para búsqueda automática
         const allFiles = [
             ...this.state.availableFiles.instrumentos.map(f => ({...f, section: 'instrumentos'})),
             ...this.state.availableFiles.voces.map(f => ({...f, section: 'voces'}))
@@ -422,12 +512,13 @@ class PDFCombiner {
                         <div class="match-status ${result.confirmed ? 'confirmed' : 'suggested'}">
                             ${result.confirmed ? '✅ Confirmado automáticamente' : '⚠️ Requiere confirmación'}
                             • Buscando: "${result.searchTerm}"
+                            • Sección: ${bestMatch.section}
                         </div>
                         ${result.matches.length > 1 ? `
                             <select class="alternative-select" onchange="CombinerModule.selectAlternativeMatch(${index}, this.value)">
                                 ${result.matches.map((match, matchIndex) => `
                                     <option value="${matchIndex}" ${matchIndex === 0 ? 'selected' : ''}>
-                                        ${match.name} (${Math.round(match.similarity * 100)}%)
+                                        ${match.name} (${Math.round(match.similarity * 100)}%) - ${match.section}
                                     </option>
                                 `).join('')}
                             </select>
@@ -642,6 +733,7 @@ class PDFCombiner {
                 <div style="margin-top: var(--spacing-md); color: var(--text-muted); font-size: 0.9rem;">
                     <div>📄 Total de archivos: ${files.length}</div>
                     <div>💾 Tamaño estimado: ${this.formatBytes(window.RealPDFCombiner.estimateCombinedSize(files))}</div>
+                    <div>🔄 Modo: ${this.state.currentMode === 'manual' ? 'Manual' : 'Automático'}</div>
                 </div>
             </div>
         `;
@@ -668,6 +760,7 @@ class PDFCombiner {
         
         const fileSizeMB = (pdfBlob.size / 1024 / 1024).toFixed(2);
         const timestamp = new Date().toLocaleString('es-ES');
+        const mode = this.state.currentMode === 'manual' ? 'Manual' : 'Automático';
         
         const modal = document.createElement('div');
         modal.className = 'loading-overlay show';
@@ -678,10 +771,10 @@ class PDFCombiner {
                 
                 <div style="background: var(--dark-gray); padding: var(--spacing-lg); border-radius: var(--radius-md); margin: var(--spacing-lg) 0;">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-md); text-align: left;">
-                        <div><strong>Archivos combinados:</strong> ${files.length}</div>
-                        <div><strong>Tamaño final:</strong> ${fileSizeMB} MB</div>
+                        <div><strong>Modo:</strong> ${mode}</div>
+                        <div><strong>Archivos:</strong> ${files.length}</div>
+                        <div><strong>Tamaño:</strong> ${fileSizeMB} MB</div>
                         <div><strong>Fecha:</strong> ${timestamp}</div>
-                        <div><strong>Páginas:</strong> Múltiples</div>
                     </div>
                 </div>
                 
@@ -787,73 +880,6 @@ class PDFCombiner {
         document.body.appendChild(modal);
     }
 
-    showProcessingModal(files) {
-        const modal = document.createElement('div');
-        modal.className = 'loading-overlay show';
-        modal.id = 'processing-modal';
-        modal.innerHTML = `
-            <div class="loading-spinner">
-                <h3>🔄 Procesando PDFs</h3>
-                <div class="spinner"></div>
-                <p>Combinando ${files.length} archivos...</p>
-                <div id="processing-progress" style="margin-top: var(--spacing-md); color: var(--text-muted);">
-                    Preparando archivos...
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-    }
-
-    async simulatePDFCombination(files) {
-        const progressElement = document.getElementById('processing-progress');
-        
-        for (let i = 0; i < files.length; i++) {
-            if (progressElement) {
-                progressElement.textContent = `Procesando: ${files[i].name} (${i + 1}/${files.length})`;
-            }
-            await new Promise(resolve => setTimeout(resolve, 800));
-        }
-        
-        if (progressElement) {
-            progressElement.textContent = 'Finalizando combinación...';
-        }
-        await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-
-    showSuccessModal(files) {
-        const processingModal = document.getElementById('processing-modal');
-        if (processingModal) {
-            processingModal.remove();
-        }
-        
-        const modal = document.createElement('div');
-        modal.className = 'loading-overlay show';
-        modal.innerHTML = `
-            <div class="loading-spinner">
-                <h3>✅ PDF Combinado Exitosamente</h3>
-                <div style="font-size: 4rem; margin: var(--spacing-lg) 0;">📄</div>
-                <p><strong>Archivos combinados:</strong> ${files.length}</p>
-                <p><strong>Nombre del archivo:</strong> PDFs_Combinados_${Date.now()}.pdf</p>
-                
-                <div style="display: flex; gap: var(--spacing-md); justify-content: center; margin-top: var(--spacing-lg);">
-                    <button class="btn secondary" onclick="this.closest('.loading-overlay').remove()">
-                        ✨ Cerrar
-                    </button>
-                    <button class="btn" onclick="CombinerModule.downloadCombinedPDF(); this.closest('.loading-overlay').remove();">
-                        📥 Descargar PDF
-                    </button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-    }
-
-    downloadCombinedPDF() {
-        // Aquí iría la lógica real de descarga
-        console.log('📥 Descargando PDF combinado...');
-        this.showSuccess('¡PDF descargado exitosamente!');
-    }
-
     clearAll() {
         if (this.state.currentMode === 'manual') {
             this.clearAllSelections();
@@ -885,21 +911,33 @@ const CombinerModule = new PDFCombiner();
 
 // Funciones globales para el HTML
 window.CombinerModule = {
+    // Funciones del switch principal
+    switchMode: (mode) => CombinerModule.switchMode(mode),
+    
+    // Funciones del switch de sección
+    switchSection: (section) => CombinerModule.switchSection(section),
+    
+    // Funciones de modo manual
     toggleFileSelection: (fileId) => CombinerModule.toggleFileSelection(fileId),
     removeSelectedFile: (fileId) => CombinerModule.removeSelectedFile(fileId),
     clearAllSelections: () => CombinerModule.clearAllSelections(),
+    
+    // Funciones de modo automático
     searchSongs: () => CombinerModule.searchSongs(),
     selectAlternativeMatch: (resultIndex, matchIndex) => CombinerModule.selectAlternativeMatch(resultIndex, matchIndex),
     toggleConfirmation: (resultIndex) => CombinerModule.toggleConfirmation(resultIndex),
+    
+    // Funciones de vista previa y combinación
     showPreview: () => CombinerModule.showPreview(),
     closePreview: () => CombinerModule.closePreview(),
     combineFiles: () => CombinerModule.combineFiles(),
     confirmCombination: () => CombinerModule.confirmCombination(),
-    downloadCombinedPDF: () => CombinerModule.downloadCombinedPDF(),
-    downloadRealPDF: () => CombinerModule.downloadRealPDF(), // ← NUEVO
+    downloadRealPDF: () => CombinerModule.downloadRealPDF(),
+    
+    // Funciones generales
     clearAll: () => CombinerModule.clearAll(),
     init: () => CombinerModule.init(),
     getState: () => CombinerModule.state
 };
 
-console.log('🔗 Combiner Module cargado');
+console.log('🔗 Combiner Module cargado - VERSIÓN MEJORADA con switch de sección');
