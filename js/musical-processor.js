@@ -1111,6 +1111,358 @@ renderMusicalContent() {
         console.log('Query de búsqueda:', this.searchQuery);
         console.groupEnd();
     }
+
+    /**
+ * Descarga un archivo desde Google Drive
+ * @param {Object} file - Objeto de archivo con id y name
+ * @returns {Promise<Blob>} - Blob del archivo descargado
+ */
+async downloadFileBlob(file) {
+    try {
+        console.log(`📥 Descargando archivo: ${file.name || file.id}`);
+        
+        // Verificar que DriveAPI esté disponible
+        const driveAPI = window.AppState?.driveAPI;
+        if (!driveAPI) {
+            throw new Error('DriveAPI no está disponible. Asegúrate de estar conectado a Google Drive.');
+        }
+        
+        if (!driveAPI.isSignedIn) {
+            throw new Error('No hay sesión activa en Google Drive. Inicia sesión primero.');
+        }
+        
+        // Usar el método de descarga de DriveAPI
+        const blob = await driveAPI.downloadFileBlob(file.id);
+        
+        console.log(`✅ Archivo descargado: ${blob.size} bytes`);
+        return blob;
+        
+    } catch (error) {
+        console.error(`❌ Error descargando archivo ${file.name || file.id}:`, error);
+        throw new Error(`No se pudo descargar el archivo: ${error.message}`);
+    }
+}
+
+/**
+ * Actualiza el contenido visual del módulo musical
+ * @param {string} content - HTML content to display
+ */
+updateContent(content) {
+    try {
+        // Buscar el contenedor principal del módulo musical
+        const contentContainer = document.getElementById('musical-content');
+        
+        if (contentContainer) {
+            contentContainer.innerHTML = content;
+            console.log('📄 Contenido del módulo musical actualizado');
+        } else {
+            console.warn('⚠️ Contenedor musical-content no encontrado');
+            
+            // Buscar contenedores alternativos
+            const alternatives = [
+                '#module-content',
+                '.musical-display',
+                '.module-content',
+                '#content-display'
+            ];
+            
+            for (const selector of alternatives) {
+                const container = document.querySelector(selector);
+                if (container) {
+                    container.innerHTML = content;
+                    console.log(`📄 Contenido actualizado en: ${selector}`);
+                    return;
+                }
+            }
+            
+            // Si no se encuentra ningún contenedor, mostrar en consola
+            console.error('❌ No se encontró ningún contenedor para mostrar el contenido');
+            console.log('Contenido que se intentaba mostrar:', content);
+        }
+        
+    } catch (error) {
+        console.error('❌ Error actualizando contenido:', error);
+    }
+}
+
+/**
+ * Oculta los controles de transposición
+ */
+hideTranspositionControls() {
+    const transpositionPanel = document.getElementById('transposition-panel');
+    if (transpositionPanel) {
+        transpositionPanel.style.display = 'none';
+    }
+}
+
+/**
+ * Muestra información del archivo procesado
+ * @param {Object} fileInfo - Información del archivo
+ */
+showFileInfo(fileInfo) {
+    try {
+        console.log('📋 Mostrando información del archivo:', fileInfo.name);
+        
+        // Actualizar título del archivo actual
+        const titleElement = document.getElementById('current-musical-file');
+        if (titleElement) {
+            titleElement.textContent = fileInfo.name || 'Archivo sin nombre';
+        }
+        
+        // Actualizar información adicional si existe
+        if (fileInfo.extractionInfo) {
+            const { method, helpMessage, textLength } = fileInfo.extractionInfo;
+            console.log(`🔍 Método de extracción: ${method}`);
+            console.log(`📏 Texto extraído: ${textLength} caracteres`);
+            
+            if (helpMessage) {
+                console.log(`💡 Sugerencia: ${helpMessage}`);
+            }
+        }
+        
+    } catch (error) {
+        console.error('❌ Error mostrando información del archivo:', error);
+    }
+}
+
+/**
+ * Oculta el status de procesamiento
+ */
+hideProcessingStatus() {
+    const statusPanel = document.getElementById('musical-status');
+    if (statusPanel) {
+        statusPanel.style.display = 'none';
+    }
+}
+
+/**
+ * Muestra error cuando no se detectan acordes
+ * @param {Object} extractedData - Datos extraídos del PDF
+ */
+async handleNoChords(extractedData) {
+    console.log('⚠️ No se detectaron acordes en el texto extraído');
+    
+    const noChordContent = `
+        <div class="no-chords-detected">
+            <div class="message-header">
+                <span class="warning-icon">⚠️</span>
+                <h3>No se detectaron acordes</h3>
+            </div>
+            <div class="message-content">
+                <p>El texto fue extraído correctamente, pero no se encontraron acordes válidos.</p>
+                <p><strong>Texto extraído:</strong> ${extractedData.text.length} caracteres</p>
+                <div class="message-actions">
+                    <button class="control-btn" onclick="window.manualChordInput?.show()">
+                        🎼 Agregar Acordes Manualmente
+                    </button>
+                    <button class="control-btn" onclick="this.showExtractedText()">
+                        📄 Ver Texto Extraído
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    this.updateContent(noChordContent);
+}
+
+/**
+ * Muestra el texto extraído para revisión
+ */
+showExtractedText() {
+    if (!this.state.originalText) {
+        this.showError('No hay texto extraído para mostrar');
+        return;
+    }
+    
+    const textContent = `
+        <div class="extracted-text-display">
+            <div class="text-header">
+                <h3>📄 Texto Extraído del PDF</h3>
+                <p>Revisa el texto para identificar posibles acordes</p>
+            </div>
+            <div class="text-content">
+                <pre>${this.state.originalText}</pre>
+            </div>
+            <div class="text-actions">
+                <button class="control-btn" onclick="window.manualChordInput?.show()">
+                    🎼 Agregar Acordes Manualmente
+                </button>
+                <button class="control-btn" onclick="this.goBack()">
+                    ← Volver
+                </button>
+            </div>
+        </div>
+    `;
+    
+    this.updateContent(textContent);
+}
+
+/**
+ * Vuelve a la lista de archivos
+ */
+goBack() {
+    // Limpiar estado actual
+    this.state.currentFile = null;
+    this.state.originalText = '';
+    this.state.detectedChords = [];
+    
+    // Mostrar lista de archivos nuevamente
+    this.renderFileList();
+}
+
+/**
+ * Método de respaldo para casos donde faltan dependencias
+ */
+checkMissingDependencies() {
+    const missing = [];
+    
+    // Verificar DriveAPI
+    if (!window.AppState?.driveAPI) {
+        missing.push('DriveAPI');
+    }
+    
+    // Verificar dependencias del módulo musical
+    const musicalDeps = ['ChordDetector', 'ChordTransposer', 'PDFTextExtractor', 'MusicalRenderer'];
+    for (const dep of musicalDeps) {
+        if (!window[dep]) {
+            missing.push(dep);
+        }
+    }
+    
+    if (missing.length > 0) {
+        console.error('❌ Dependencias faltantes:', missing);
+        
+        const errorContent = `
+            <div class="dependency-error">
+                <div class="error-header">
+                    <span class="error-icon">🚨</span>
+                    <h3>Dependencias Faltantes</h3>
+                </div>
+                <div class="error-content">
+                    <p>El módulo musical no puede funcionar porque faltan los siguientes componentes:</p>
+                    <ul>
+                        ${missing.map(dep => `<li>${dep}</li>`).join('')}
+                    </ul>
+                    <div class="error-actions">
+                        <button class="control-btn" onclick="location.reload()">
+                            🔄 Recargar Página
+                        </button>
+                        <button class="control-btn" onclick="this.showFallbackMode()">
+                            👁️ Modo Solo Visualización
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        this.updateContent(errorContent);
+        return false;
+    }
+    
+    return true;
+}
+
+/**
+ * Muestra modo de solo visualización cuando fallan las dependencias
+ */
+showFallbackMode() {
+    const fallbackContent = `
+        <div class="fallback-mode">
+            <div class="mode-header">
+                <span class="info-icon">👁️</span>
+                <h3>Modo Solo Visualización</h3>
+            </div>
+            <div class="mode-content">
+                <p>El módulo musical está funcionando en modo limitado.</p>
+                <p>Puedes ver los archivos PDF, pero las funciones de detección y transposición de acordes no están disponibles.</p>
+                <div class="mode-actions">
+                    <button class="control-btn" onclick="this.loadInstrumentFiles()">
+                        📁 Ver Lista de Archivos
+                    </button>
+                    <button class="control-btn" onclick="location.reload()">
+                        🔄 Intentar Recargar
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    this.updateContent(fallbackContent);
+}
+
+// === MÉTODO DE INICIALIZACIÓN MEJORADO ===
+
+/**
+ * Método de inicialización mejorado con verificaciones
+ */
+async initWithFallback() {
+    try {
+        console.log('🎼 Inicializando módulo musical con respaldo...');
+        
+        // Verificar dependencias críticas
+        if (!this.checkMissingDependencies()) {
+            console.warn('⚠️ Inicializando en modo de respaldo');
+            this.showFallbackMode();
+            return false;
+        }
+        
+        // Continuar con inicialización normal
+        return await this.init();
+        
+    } catch (error) {
+        console.error('❌ Error en inicialización:', error);
+        this.showFallbackMode();
+        return false;
+    }
+}
+
+// === FUNCIÓN DE APLICACIÓN DE LA CORRECCIÓN ===
+
+/**
+ * Aplica la corrección a la instancia existente de MusicalProcessor
+ */
+applyMusicalProcessorFix() {
+    if (!window.MusicalProcessor) {
+        console.error('❌ MusicalProcessor no está disponible');
+        return false;
+    }
+    
+    const methods = [
+        'downloadFileBlob',
+        'updateContent', 
+        'hideTranspositionControls',
+        'showFileInfo',
+        'hideProcessingStatus',
+        'handleNoChords',
+        'showExtractedText',
+        'goBack',
+        'checkMissingDependencies',
+        'showFallbackMode',
+        'initWithFallback'
+    ];
+    
+    // Agregar métodos al prototipo
+    methods.forEach(methodName => {
+        if (typeof eval(methodName) === 'function') {
+            window.MusicalProcessor.prototype[methodName] = eval(methodName);
+        }
+    });
+    
+    console.log('✅ Corrección aplicada al MusicalProcessor');
+    
+    // Si hay una instancia existente, aplicar la corrección
+    if (window.musicalModule?.processor) {
+        methods.forEach(methodName => {
+            if (typeof eval(methodName) === 'function') {
+                window.musicalModule.processor[methodName] = eval(methodName).bind(window.musicalModule.processor);
+            }
+        });
+        console.log('✅ Corrección aplicada a la instancia existente');
+    }
+    
+    return true;
+    }
 }
 
 // === EXPORTAR ===
