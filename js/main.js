@@ -194,54 +194,69 @@ updateCurrentSectionCount() {
         this.initializeModule(moduleName);
     }
 
-    async loadModuleContent(moduleName) {
-        if (AppState.loadedModules.has(moduleName)) {
-            return;
-        }
-
-        try {
-            const moduleContainer = document.getElementById(`${moduleName}-module`);
-            
-            switch (moduleName) {
-                case 'combiner':
-                    const response = await fetch('modules/combiner.html');
-                    if (!response.ok) {
-                        throw new Error(`Error cargando módulo: ${response.statusText}`);
-                    }
-                    
-                    const html = await response.text();
-                    moduleContainer.innerHTML = html;
-                    AppState.loadedModules.add('combiner');
-                    break;
-                    
-                case 'musical':
-                    // Módulo musical (futuro)
-                    if (window.MusicalModule && typeof window.MusicalModule.activate === 'function') {
-                        window.MusicalModule.activate();
-                    }
-                    break;
-                    
-                case 'visualizer':
-                    // Ya está en el HTML principal
-                    break;
-            }
-            
-        } catch (error) {
-            const moduleContainer = document.getElementById(`${moduleName}-module`);
-            moduleContainer.innerHTML = `
-                <div class="module-header">
-                    <h2>❌ Error cargando módulo</h2>
-                </div>
-                <div class="placeholder">
-                    <div class="placeholder-icon">⚠️</div>
-                    <p>Error: ${error.message}</p>
-                    <button class="btn secondary" onclick="window.app.retryLoadModule('${moduleName}')">
-                        🔄 Reintentar
-                    </button>
-                </div>
-            `;
-        }
+async loadModuleContent(moduleName) {
+    if (AppState.loadedModules.has(moduleName)) {
+        return;
     }
+
+    try {
+        const moduleContainer = document.getElementById(`${moduleName}-module`);
+        
+        switch (moduleName) {
+            case 'combiner':
+                const combinerResponse = await fetch('modules/combiner.html');
+                if (!combinerResponse.ok) {
+                    throw new Error(`Error cargando módulo combiner: ${combinerResponse.statusText}`);
+                }
+                
+                const combinerHtml = await combinerResponse.text();
+                moduleContainer.innerHTML = combinerHtml;
+                AppState.loadedModules.add('combiner');
+                break;
+                
+            case 'musical':
+                // 🎼 CORRECCIÓN: Cargar HTML del módulo musical dinámicamente
+                const musicalResponse = await fetch('modules/musical.html');
+                if (!musicalResponse.ok) {
+                    throw new Error(`Error cargando módulo musical: ${musicalResponse.statusText}`);
+                }
+                
+                const musicalHtml = await musicalResponse.text();
+                moduleContainer.innerHTML = musicalHtml;
+                AppState.loadedModules.add('musical');
+                
+                // Ahora sí activar el módulo musical después de cargar el HTML
+                if (window.MusicalModule && typeof window.MusicalModule.activate === 'function') {
+                    // Pequeño delay para asegurar que el DOM esté listo
+                    setTimeout(() => {
+                        window.MusicalModule.activate();
+                    }, 100);
+                }
+                break;
+                
+            case 'visualizer':
+                // Ya está en el HTML principal
+                break;
+        }
+        
+    } catch (error) {
+        const moduleContainer = document.getElementById(`${moduleName}-module`);
+        moduleContainer.innerHTML = `
+            <div class="module-header">
+                <h2>❌ Error cargando módulo</h2>
+            </div>
+            <div class="placeholder">
+                <div class="placeholder-icon">⚠️</div>
+                <p>Error: ${error.message}</p>
+                <button class="btn secondary" onclick="window.app.retryLoadModule('${moduleName}')">
+                    🔄 Reintentar
+                </button>
+            </div>
+        `;
+        
+        console.error(`❌ Error cargando módulo ${moduleName}:`, error);
+    }
+}
 
     async retryLoadModule(moduleName) {
         AppState.loadedModules.delete(moduleName);
