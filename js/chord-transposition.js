@@ -233,7 +233,7 @@ class ChordTransposer {
     }
 
     /**
-     * Determina si se deben usar bemoles según la tonalidad
+     * Determina si una tonalidad debe usar bemoles
      */
     shouldUseFlats(key) {
         if (!key) return false;
@@ -243,12 +243,10 @@ class ChordTransposer {
     }
 
     /**
-     * Optimiza notación de una nota individual
+     * Optimiza notación de una nota
      */
     optimizeNoteNotation(note, useFlats) {
-        if (!note || (!note.includes('#') && !note.includes('b'))) {
-            return note; // No tiene accidentales
-        }
+        if (!note || !note.includes('#') && !note.includes('b')) return note;
         
         if (useFlats && note.includes('#')) {
             return this.enharmonicEquivalents[note] || note;
@@ -260,22 +258,7 @@ class ChordTransposer {
     }
 
     /**
-     * Calcula intervalo entre dos notas
-     */
-    calculateInterval(fromNote, toNote) {
-        const fromIndex = this.chromaticScale.indexOf(fromNote);
-        const toIndex = this.chromaticScale.indexOf(toNote);
-        
-        if (fromIndex === -1 || toIndex === -1) return null;
-        
-        let interval = toIndex - fromIndex;
-        if (interval < 0) interval += 12;
-        
-        return interval;
-    }
-
-    /**
-     * Obtiene nombre del intervalo
+     * Obtiene nombre del intervalo musical
      */
     getIntervalName(semitones) {
         const intervalNames = {
@@ -349,8 +332,8 @@ class ChordTransposer {
         const reasons = {
             1: 'Un semitono más alto (más brillante)',
             2: 'Un tono más alto (registro más agudo)',
-            -1: 'Un semitono más bajo (más cálido)', 
-            -2: 'Un tono más bajo (registro más grave)'
+            '-1': 'Un semitono más bajo (más cálido)', 
+            '-2': 'Un tono más bajo (registro más grave)'
         };
         
         return reasons[alternative] || 'Alternativa';
@@ -486,3 +469,6 @@ class ChordTransposer {
 
 // === EXPORTAR ===
 window.ChordTransposer = ChordTransposer;
+
+// DEBUG TEMPORAL - Verificar que se carga correctamente
+console.log('🎼 ChordTransposer exportado:', typeof window.ChordTransposer);
