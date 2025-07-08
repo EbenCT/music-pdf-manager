@@ -1,0 +1,176 @@
+<!-- TEMPLATE DEL MÓDULO MUSICAL INSTRUCTIVO -->
+<!-- Este archivo se carga dinámicamente cuando se activa el módulo -->
+
+<div class="module-header">
+    <h2>🎼 Módulo Musical Instructivo</h2>
+    <p>Visualización de acordes con transposición en tiempo real</p>
+</div>
+
+<!-- Panel de estado -->
+<div id="musical-status" class="musical-status hidden">
+    <div class="status-content">
+        <div class="status-icon">🎵</div>
+        <div class="status-info">
+            <h3 id="musical-status-title">Procesando archivo musical...</h3>
+            <p id="musical-status-message">Extrayendo texto y detectando acordes</p>
+        </div>
+    </div>
+</div>
+
+<div class="musical-grid">
+    <!-- Panel izquierdo: Lista de archivos instrumentos -->
+    <div class="musical-panel">
+        <div class="panel-header">
+            <h3>🎸 Archivos de Instrumentos</h3>
+            <button class="btn secondary small" onclick="MusicalModule.refreshFileList()">
+                🔄 Actualizar
+            </button>
+        </div>
+        
+        <!-- Buscador específico para musical -->
+        <div class="search-container-musical">
+            <input type="text" id="musical-search-input" 
+                   placeholder="🔍 Buscar archivos de acordes..." 
+                   class="search-input-musical">
+        </div>
+        
+        <div class="file-list musical-file-list" id="musical-file-list">
+            <div class="loading">
+                <div class="spinner"></div>
+                Cargando archivos de instrumentos...
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel derecho: Visualizador musical -->
+    <div class="musical-viewer-panel">
+        <!-- Header con controles de transposición -->
+        <div class="musical-viewer-header">
+            <div class="file-info">
+                <h3 id="current-musical-file">Selecciona un archivo de acordes</h3>
+                <div class="musical-meta">
+                    <span id="chord-count">0 acordes</span>
+                    <span id="current-key">Tonalidad: N/A</span>
+                </div>
+            </div>
+            
+            <!-- Panel de transposición -->
+            <div class="transposition-panel" id="transposition-panel" style="display: none;">
+                <div class="transposition-title">
+                    <h4>🎼 Transposición</h4>
+                    <button class="btn secondary small" onclick="MusicalModule.resetTransposition()">
+                        🔄 Original
+                    </button>
+                </div>
+                
+                <div class="transposition-controls">
+                    <button class="transpose-btn" data-semitones="1" onclick="MusicalModule.transpose(1)">
+                        <span class="transpose-symbol">+1</span>
+                        <span class="transpose-label">Tono</span>
+                    </button>
+                    
+                    <button class="transpose-btn" data-semitones="0.5" onclick="MusicalModule.transpose(0.5)">
+                        <span class="transpose-symbol">+½</span>
+                        <span class="transpose-label">Semitono</span>
+                    </button>
+                    
+                    <div class="current-transposition">
+                        <span class="transposition-value" id="transposition-value">0</span>
+                        <span class="transposition-unit">semitonos</span>
+                    </div>
+                    
+                    <button class="transpose-btn" data-semitones="-0.5" onclick="MusicalModule.transpose(-0.5)">
+                        <span class="transpose-symbol">-½</span>
+                        <span class="transpose-label">Semitono</span>
+                    </button>
+                    
+                    <button class="transpose-btn" data-semitones="-1" onclick="MusicalModule.transpose(-1)">
+                        <span class="transpose-symbol">-1</span>
+                        <span class="transpose-label">Tono</span>
+                    </button>
+                </div>
+                
+                <!-- Información adicional -->
+                <div class="transposition-info">
+                    <div class="key-info">
+                        <span>Original: <strong id="original-key">-</strong></span>
+                        <span>Actual: <strong id="transposed-key">-</strong></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contenedor del texto musical -->
+        <div class="musical-content" id="musical-content">
+            <div class="placeholder">
+                <div class="placeholder-icon">🎼</div>
+                <p>Selecciona un archivo de instrumentos para ver los acordes</p>
+                <div class="musical-features">
+                    <div class="feature-item">
+                        <span class="feature-icon">🎯</span>
+                        <span>Detección automática de acordes</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">🎵</span>
+                        <span>Transposición en tiempo real</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">🎨</span>
+                        <span>Resaltado de acordes</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de configuración musical -->
+<div id="musical-config-modal" class="loading-overlay">
+    <div class="loading-spinner config-content">
+        <div class="config-header">
+            <h3>⚙️ Configuración Musical</h3>
+            <button class="control-btn" onclick="MusicalModule.closeConfig()">✕</button>
+        </div>
+        
+        <div class="config-sections">
+            <div class="config-section">
+                <h4>🎯 Detección de Acordes</h4>
+                <label>
+                    <input type="checkbox" id="detect-complex-chords" checked>
+                    Detectar acordes complejos (7th, sus, add, etc.)
+                </label>
+                <label>
+                    <input type="checkbox" id="highlight-bass-notes" checked>
+                    Resaltar notas de bajo (Am/E)
+                </label>
+            </div>
+            
+            <div class="config-section">
+                <h4>🎨 Visualización</h4>
+                <label>
+                    Estilo de acordes:
+                    <select id="chord-style">
+                        <option value="bold-red">Negrita Roja</option>
+                        <option value="bold-blue">Negrita Azul</option>
+                        <option value="highlight">Resaltado</option>
+                        <option value="custom">Personalizado</option>
+                    </select>
+                </label>
+                <label>
+                    Tamaño de fuente:
+                    <input type="range" id="font-size" min="12" max="24" value="16">
+                    <span id="font-size-value">16px</span>
+                </label>
+            </div>
+        </div>
+        
+        <div class="config-actions">
+            <button class="btn secondary" onclick="MusicalModule.resetConfig()">
+                🔄 Restaurar
+            </button>
+            <button class="btn" onclick="MusicalModule.applyConfig()">
+                ✅ Aplicar
+            </button>
+        </div>
+    </div>
+</div>

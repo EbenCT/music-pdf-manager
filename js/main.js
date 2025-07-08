@@ -216,6 +216,9 @@ updateCurrentSectionCount() {
                     
                 case 'musical':
                     // Módulo musical (futuro)
+                    if (window.MusicalModule && typeof window.MusicalModule.activate === 'function') {
+                        window.MusicalModule.activate();
+                    }
                     break;
                     
                 case 'visualizer':

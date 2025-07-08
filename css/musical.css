@@ -1,0 +1,514 @@
+/* ===== MUSICAL MODULE STYLES ===== */
+
+/* === MUSICAL GRID === */
+.musical-grid {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: var(--spacing-xl);
+    min-height: 70vh;
+}
+
+/* === MUSICAL PANELS === */
+.musical-panel {
+    background: var(--secondary-black);
+    border: 2px solid var(--border-gray);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+}
+
+.musical-viewer-panel {
+    background: var(--secondary-black);
+    border: 2px solid var(--border-gray);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+    display: flex;
+    flex-direction: column;
+}
+
+/* === MUSICAL FILE LIST === */
+.musical-file-list {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.musical-file-item {
+    background: var(--dark-gray);
+    border: 2px solid transparent;
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    margin: var(--spacing-sm);
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    position: relative;
+}
+
+.musical-file-item:hover {
+    background: var(--medium-gray);
+    border-color: var(--accent-red);
+    transform: translateX(3px);
+}
+
+.musical-file-item.active {
+    background: var(--accent-red-light);
+    border-color: var(--accent-red);
+    box-shadow: var(--shadow-sm);
+}
+
+.musical-file-item.active::before {
+    content: '🎼';
+    position: absolute;
+    left: var(--spacing-sm);
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.2rem;
+}
+
+.musical-file-name {
+    color: var(--text-primary);
+    font-weight: 500;
+    margin-bottom: var(--spacing-xs);
+    padding-left: var(--spacing-xl);
+}
+
+.musical-file-meta {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    padding-left: var(--spacing-xl);
+}
+
+/* === SEARCH CONTAINER === */
+.search-container-musical {
+    padding: var(--spacing-md);
+    border-bottom: 1px solid var(--border-gray);
+}
+
+.search-input-musical {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--dark-gray);
+    border: 2px solid var(--border-gray);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    transition: all var(--transition-normal);
+}
+
+.search-input-musical:focus {
+    outline: none;
+    border-color: var(--accent-red);
+    box-shadow: 0 0 0 3px var(--accent-red-light);
+}
+
+.search-input-musical::placeholder {
+    color: var(--text-muted);
+}
+
+/* === MUSICAL VIEWER HEADER === */
+.musical-viewer-header {
+    background: linear-gradient(135deg, var(--dark-gray), var(--medium-gray));
+    padding: var(--spacing-lg);
+    border-bottom: 2px solid var(--border-gray);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.file-info h3 {
+    color: var(--text-primary);
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: var(--spacing-xs);
+}
+
+.musical-meta {
+    display: flex;
+    gap: var(--spacing-md);
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+/* === TRANSPOSITION PANEL === */
+.transposition-panel {
+    background: var(--primary-black);
+    border: 2px solid var(--accent-red);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-md);
+    box-shadow: var(--shadow-md);
+}
+
+.transposition-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-md);
+}
+
+.transposition-title h4 {
+    color: var(--accent-red);
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.transposition-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+}
+
+.transpose-btn {
+    background: var(--dark-gray);
+    border: 2px solid var(--border-gray);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm);
+    cursor: pointer;
+    transition: all var(--transition-normal);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 60px;
+    height: 60px;
+    justify-content: center;
+}
+
+.transpose-btn:hover {
+    background: var(--medium-gray);
+    border-color: var(--accent-red);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-sm);
+}
+
+.transpose-btn:active {
+    transform: translateY(0);
+}
+
+.transpose-symbol {
+    color: var(--accent-red);
+    font-size: 1.2rem;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.transpose-label {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    margin-top: 2px;
+}
+
+.current-transposition {
+    background: var(--accent-red-light);
+    border: 2px solid var(--accent-red);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm);
+    text-align: center;
+    min-width: 80px;
+}
+
+.transposition-value {
+    color: var(--accent-red);
+    font-size: 1.4rem;
+    font-weight: bold;
+    display: block;
+    line-height: 1;
+}
+
+.transposition-unit {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+}
+
+.transposition-info {
+    background: var(--dark-gray);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm);
+}
+
+.key-info {
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.key-info strong {
+    color: var(--accent-red);
+}
+
+/* === MUSICAL CONTENT === */
+.musical-content {
+    flex: 1;
+    background: var(--primary-black);
+    padding: var(--spacing-lg);
+    overflow-y: auto;
+    font-family: 'Courier New', 'Monaco', monospace;
+    line-height: 1.8;
+    position: relative;
+}
+
+.musical-text {
+    color: var(--text-primary);
+    font-size: 16px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* === CHORD STYLES === */
+.chord {
+    color: var(--accent-red);
+    font-weight: bold;
+    font-size: 1.1em;
+    background: var(--accent-red-light);
+    padding: 1px 3px;
+    border-radius: 3px;
+    border-bottom: 2px solid var(--accent-red);
+    transition: all var(--transition-fast);
+    position: relative;
+    display: inline-block;
+}
+
+.chord:hover {
+    background: var(--accent-red);
+    color: var(--white);
+    transform: scale(1.05);
+    z-index: 10;
+}
+
+.chord.complex {
+    border-bottom-style: dashed;
+}
+
+.chord.bass-note {
+    border-left: 3px solid var(--accent-red);
+    padding-left: 6px;
+}
+
+.chord.transposed {
+    animation: chordTransition var(--transition-normal);
+}
+
+@keyframes chordTransition {
+    0% { background: var(--accent-red-light); }
+    50% { background: var(--accent-red); color: var(--white); }
+    100% { background: var(--accent-red-light); }
+}
+
+/* === CHORD ALTERNATIVE STYLES === */
+.chord-style-bold-blue .chord {
+    color: #007bff;
+    border-bottom-color: #007bff;
+    background: rgba(0, 123, 255, 0.1);
+}
+
+.chord-style-bold-blue .chord:hover {
+    background: #007bff;
+}
+
+.chord-style-highlight .chord {
+    background: #ffeb3b;
+    color: var(--primary-black);
+    border-bottom-color: #f57f17;
+}
+
+.chord-style-highlight .chord:hover {
+    background: #f57f17;
+    color: var(--white);
+}
+
+/* === MUSICAL FEATURES === */
+.musical-features {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    margin-top: var(--spacing-xl);
+    max-width: 300px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.feature-item {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.feature-icon {
+    font-size: 1.2rem;
+}
+
+/* === MUSICAL STATUS === */
+.musical-status {
+    background: linear-gradient(135deg, var(--dark-gray), var(--medium-gray));
+    border: 2px solid var(--border-gray);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--spacing-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+    transition: all var(--transition-normal);
+}
+
+.musical-status.hidden {
+    display: none;
+}
+
+.musical-status.processing {
+    border-color: var(--accent-red);
+    animation: pulse 2s infinite;
+}
+
+/* === CONFIG MODAL === */
+.config-content {
+    background: var(--secondary-black);
+    border: 2px solid var(--border-gray);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    max-width: 500px;
+    max-height: 80vh;
+    overflow: auto;
+}
+
+.config-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-md);
+    border-bottom: 2px solid var(--border-gray);
+}
+
+.config-header h3 {
+    color: var(--text-primary);
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.config-sections {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+}
+
+.config-section {
+    background: var(--dark-gray);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    border: 1px solid var(--border-gray);
+}
+
+.config-section h4 {
+    color: var(--accent-red);
+    font-size: 1rem;
+    font-weight: 600;
+    margin-bottom: var(--spacing-md);
+}
+
+.config-section label {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-sm);
+    cursor: pointer;
+}
+
+.config-section input[type="checkbox"] {
+    accent-color: var(--accent-red);
+}
+
+.config-section select,
+.config-section input[type="range"] {
+    background: var(--medium-gray);
+    border: 1px solid var(--border-gray);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    padding: var(--spacing-xs);
+}
+
+.config-actions {
+    display: flex;
+    gap: var(--spacing-md);
+    justify-content: center;
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--border-gray);
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 1024px) {
+    .musical-grid {
+        grid-template-columns: 1fr;
+        gap: var(--spacing-lg);
+    }
+    
+    .transposition-controls {
+        flex-wrap: wrap;
+        gap: var(--spacing-xs);
+    }
+    
+    .transpose-btn {
+        min-width: 50px;
+        height: 50px;
+    }
+}
+
+@media (max-width: 768px) {
+    .musical-viewer-header {
+        padding: var(--spacing-md);
+    }
+    
+    .transposition-panel {
+        padding: var(--spacing-sm);
+    }
+    
+    .transposition-controls {
+        justify-content: center;
+    }
+    
+    .musical-content {
+        padding: var(--spacing-md);
+        font-size: 14px;
+    }
+    
+    .key-info {
+        flex-direction: column;
+        gap: var(--spacing-xs);
+        text-align: center;
+    }
+}
+
+@media (max-width: 575px) {
+    .musical-meta {
+        flex-direction: column;
+        gap: var(--spacing-xs);
+    }
+    
+    .transposition-title {
+        flex-direction: column;
+        gap: var(--spacing-sm);
+        text-align: center;
+    }
+    
+    .transpose-btn {
+        min-width: 45px;
+        height: 45px;
+    }
+    
+    .transpose-symbol {
+        font-size: 1rem;
+    }
+    
+    .current-transposition {
+        min-width: 70px;
+    }
+    
+    .config-content {
+        margin: var(--spacing-md);
+        max-width: calc(100vw - 2rem);
+    }
+}
