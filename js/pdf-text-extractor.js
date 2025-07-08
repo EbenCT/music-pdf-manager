@@ -1,6 +1,6 @@
 /**
- * MUSIC PDF MANAGER - PDF TEXT EXTRACTOR
- * Extrae texto de PDFs manteniendo posiciones y formato
+ * MUSIC PDF MANAGER - PDF TEXT EXTRACTOR CORREGIDO
+ * Solución para el problema de extracción de 0 caracteres
  */
 
 class PDFTextExtractor {
@@ -10,15 +10,59 @@ class PDFTextExtractor {
             includePositions: true,
             mergeLines: true,
             normalizeWhitespace: false,
-            extractMetadata: true
+            extractMetadata: true,
+            useOCRFallback: true,          // NUEVO: Usar OCR como fallback
+            ocrLanguage: 'eng+spa',        // NUEVO: Idiomas para OCR
+            debugMode: true                // NUEVO: Modo debug detallado
         };
         
         this.currentDocument = null;
         this.extractionCache = new Map();
+        this.ocrWorker = null;
     }
 
     /**
-     * Extrae texto de un blob PDF
+     * Inicializa Tesseract.js para OCR fallback
+     */
+    async initializeOCR() {
+        if (this.ocrWorker) return this.ocrWorker;
+        
+        try {
+            // Cargar Tesseract.js dinámicamente
+            if (typeof Tesseract === 'undefined') {
+                console.log('📥 Cargando Tesseract.js...');
+                await this.loadTesseract();
+            }
+            
+            console.log('🤖 Inicializando OCR worker...');
+            this.ocrWorker = await Tesseract.createWorker();
+            await this.ocrWorker.loadLanguage(this.config.ocrLanguage);
+            await this.ocrWorker.initialize(this.config.ocrLanguage);
+            
+            console.log('✅ OCR worker inicializado');
+            return this.ocrWorker;
+            
+        } catch (error) {
+            console.warn('⚠️ No se pudo inicializar OCR:', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Carga Tesseract.js dinámicamente
+     */
+    async loadTesseract() {
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js';
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+        });
+    }
+
+    /**
+     * Extrae texto de un blob PDF con debugging mejorado
      */
     async extractFromBlob(pdfBlob) {
         try {
@@ -45,10 +89,12 @@ class PDFTextExtractor {
             // Convertir blob a ArrayBuffer
             const arrayBuffer = await pdfBlob.arrayBuffer();
             
-            // Cargar documento PDF
+            // Cargar documento PDF con configuración mejorada
             const loadingTask = pdfjsLib.getDocument({
                 data: arrayBuffer,
-                verbosity: 0
+                verbosity: this.config.debugMode ? 1 : 0,
+                standardFontDataUrl: null,
+                enableXfa: true
             });
             
             this.currentDocument = await loadingTask.promise;
@@ -57,22 +103,36 @@ class PDFTextExtractor {
             
             // Extraer metadata
             const metadata = await this.extractMetadata();
+            console.log('📊 Metadata extraída:', metadata);
             
-            // Extraer texto de todas las páginas
-            const extractedData = await this.extractAllPages();
+            // Extraer texto de todas las páginas con debugging
+            const extractedData = await this.extractAllPagesWithDebugging();
+            
+            // Si no se extrajo texto, intentar OCR fallback
+            if (extractedData.text.length === 0 && this.config.useOCRFallback) {
+                console.log('🤖 Texto vacío detectado, intentando OCR fallback...');
+                const ocrResult = await this.extractWithOCR();
+                if (ocrResult && ocrResult.text.length > 0) {
+                    extractedData.text = ocrResult.text;
+                    extractedData.pages = ocrResult.pages;
+                    extractedData.extractionMethod = 'OCR';
+                }
+            }
             
             const result = {
                 text: extractedData.text,
                 pages: extractedData.pages,
                 metadata: metadata,
                 extractedAt: new Date().toISOString(),
-                totalPages: this.currentDocument.numPages
+                totalPages: this.currentDocument.numPages,
+                extractionMethod: extractedData.extractionMethod || 'PDF.js'
             };
             
             // Guardar en cache
             this.extractionCache.set(cacheKey, result);
             
             console.log(`✅ Extracción completada: ${result.text.length} caracteres`);
+            console.log(`🔧 Método usado: ${result.extractionMethod}`);
             
             return result;
             
@@ -83,16 +143,16 @@ class PDFTextExtractor {
     }
 
     /**
-     * Extrae texto de todas las páginas
+     * Extrae texto con debugging detallado
      */
-    async extractAllPages() {
+    async extractAllPagesWithDebugging() {
         const pages = [];
         let combinedText = '';
         
         for (let pageNum = 1; pageNum <= this.currentDocument.numPages; pageNum++) {
             console.log(`📄 Procesando página ${pageNum}/${this.currentDocument.numPages}`);
             
-            const pageData = await this.extractPage(pageNum);
+            const pageData = await this.extractPageWithDebugging(pageNum);
             pages.push(pageData);
             
             // Combinar texto con separador de página
@@ -109,20 +169,50 @@ class PDFTextExtractor {
     }
 
     /**
-     * Extrae texto de una página específica
+     * Extrae página con debugging detallado
      */
-    async extractPage(pageNum) {
+    async extractPageWithDebugging(pageNum) {
         try {
             const page = await this.currentDocument.getPage(pageNum);
+            
+            // DEBUG: Información de la página
+            console.log(`📋 Página ${pageNum} - Info:`, {
+                rotation: page.rotate,
+                userUnit: page.userUnit,
+                view: page.view
+            });
+            
             const textContent = await page.getTextContent();
+            
+            // DEBUG: Información del contenido de texto
+            console.log(`🔍 Página ${pageNum} - TextContent:`, {
+                itemsCount: textContent.items.length,
+                styles: Object.keys(textContent.styles || {}).length
+            });
+            
+            // DEBUG: Mostrar primeros items si hay pocos
+            if (textContent.items.length <= 10) {
+                console.log(`📝 Página ${pageNum} - Items de texto:`, textContent.items);
+            }
+            
+            // DEBUG: Verificar si hay items válidos
+            const validItems = textContent.items.filter(item => 
+                item.str && typeof item.str === 'string' && item.str.trim().length > 0
+            );
+            
+            console.log(`✓ Página ${pageNum} - Items válidos: ${validItems.length}/${textContent.items.length}`);
             
             // Procesar items de texto
             const processedText = this.processTextItems(textContent.items);
+            
+            console.log(`📏 Página ${pageNum} - Texto extraído: ${processedText.text.length} caracteres`);
             
             return {
                 pageNumber: pageNum,
                 text: processedText.text,
                 items: processedText.items,
+                itemsCount: textContent.items.length,
+                validItemsCount: validItems.length,
                 viewport: page.getViewport({ scale: 1.0 })
             };
             
@@ -138,34 +228,178 @@ class PDFTextExtractor {
     }
 
     /**
-     * Procesa items de texto manteniendo posiciones
+     * Extrae texto usando OCR como fallback
+     */
+    async extractWithOCR() {
+        try {
+            const worker = await this.initializeOCR();
+            if (!worker) {
+                throw new Error('OCR worker no disponible');
+            }
+            
+            const pages = [];
+            let combinedText = '';
+            
+            for (let pageNum = 1; pageNum <= this.currentDocument.numPages; pageNum++) {
+                console.log(`🤖 OCR - Procesando página ${pageNum}/${this.currentDocument.numPages}`);
+                
+                // Convertir página a imagen
+                const imageData = await this.renderPageToImage(pageNum);
+                
+                // Aplicar OCR
+                const { data: { text } } = await worker.recognize(imageData);
+                
+                console.log(`📖 OCR - Página ${pageNum}: ${text.length} caracteres extraídos`);
+                
+                pages.push({
+                    pageNumber: pageNum,
+                    text: text,
+                    method: 'OCR'
+                });
+                
+                if (combinedText.length > 0) {
+                    combinedText += '\n\n--- Página ' + pageNum + ' ---\n\n';
+                }
+                combinedText += text;
+            }
+            
+            return {
+                text: this.postProcessText(combinedText),
+                pages: pages
+            };
+            
+        } catch (error) {
+            console.error('❌ Error en OCR fallback:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Renderiza página del PDF como imagen para OCR
+     */
+    async renderPageToImage(pageNum) {
+        const page = await this.currentDocument.getPage(pageNum);
+        
+        // Configurar viewport con escala alta para mejor OCR
+        const viewport = page.getViewport({ scale: 2.0 });
+        
+        // Crear canvas
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        
+        // Renderizar página en canvas
+        await page.render({
+            canvasContext: context,
+            viewport: viewport
+        }).promise;
+        
+        return canvas;
+    }
+
+    /**
+     * Procesa items de texto con debugging mejorado
      */
     processTextItems(textItems) {
         if (!textItems || textItems.length === 0) {
+            console.log('⚠️ No hay items de texto para procesar');
+            return { text: '', items: [] };
+        }
+
+        console.log(`🔧 Procesando ${textItems.length} items de texto`);
+
+        // DEBUG: Analizar tipos de items
+        const itemAnalysis = this.analyzeTextItems(textItems);
+        console.log('📊 Análisis de items:', itemAnalysis);
+
+        // Filtrar items válidos
+        const validItems = textItems.filter(item => {
+            const isValid = item.str && 
+                           typeof item.str === 'string' && 
+                           item.str.trim().length > 0 &&
+                           item.transform &&
+                           Array.isArray(item.transform) &&
+                           item.transform.length >= 6;
+            
+            if (!isValid && this.config.debugMode) {
+                console.log('🚫 Item inválido:', item);
+            }
+            
+            return isValid;
+        });
+
+        console.log(`✓ Items válidos para procesamiento: ${validItems.length}/${textItems.length}`);
+
+        if (validItems.length === 0) {
+            console.log('⚠️ No hay items válidos para extraer texto');
             return { text: '', items: [] };
         }
 
         // Organizar items por líneas basado en posición Y
-        const lines = this.organizeItemsByLines(textItems);
+        const lines = this.organizeItemsByLines(validItems);
+        console.log(`📐 Organizados en ${lines.length} líneas`);
         
         // Procesar cada línea
-        const processedLines = lines.map(line => this.processLine(line));
+        const processedLines = lines.map((line, index) => {
+            const lineText = this.processLine(line);
+            if (this.config.debugMode && lineText.trim()) {
+                console.log(`📝 Línea ${index + 1}: "${lineText}"`);
+            }
+            return lineText;
+        });
         
         // Combinar líneas
         const finalText = processedLines.join('\n');
         
+        console.log(`📄 Texto final: ${finalText.length} caracteres`);
+        
         return {
             text: finalText,
-            items: textItems.map(item => this.processTextItem(item))
+            items: validItems.map(item => this.processTextItem(item))
         };
     }
 
     /**
-     * Organiza items de texto por líneas
+     * Analiza los items de texto para debugging
+     */
+    analyzeTextItems(items) {
+        const analysis = {
+            total: items.length,
+            withText: 0,
+            withTransform: 0,
+            withValidTransform: 0,
+            empty: 0,
+            sample: []
+        };
+
+        items.forEach((item, index) => {
+            if (item.str) analysis.withText++;
+            if (item.transform) analysis.withTransform++;
+            if (item.transform && Array.isArray(item.transform) && item.transform.length >= 6) {
+                analysis.withValidTransform++;
+            }
+            if (!item.str || item.str.trim().length === 0) analysis.empty++;
+            
+            // Recopilar muestra de los primeros 5 items
+            if (index < 5) {
+                analysis.sample.push({
+                    str: item.str,
+                    hasTransform: !!item.transform,
+                    transformLength: item.transform ? item.transform.length : 0
+                });
+            }
+        });
+
+        return analysis;
+    }
+
+    /**
+     * Organiza items por líneas con tolerancia mejorada
      */
     organizeItemsByLines(textItems) {
         const lines = [];
-        const yTolerance = 5; // Tolerancia para considerar items en la misma línea
+        const yTolerance = 3; // Tolerancia reducida para mayor precisión
         
         textItems.forEach(item => {
             const y = item.transform[5]; // Posición Y
@@ -195,68 +429,72 @@ class PDFTextExtractor {
     }
 
     /**
-     * Procesa una línea de texto
+     * Procesa una línea de texto con espaciado mejorado
      */
     processLine(lineItems) {
         if (!lineItems || lineItems.length === 0) return '';
         
         let lineText = '';
         let lastX = 0;
+        let lastWidth = 0;
         
         lineItems.forEach((item, index) => {
             const currentX = item.transform[4];
-            const text = item.str;
+            const text = item.str.trim();
+            
+            if (!text) return; // Saltar items vacíos
             
             // Calcular espaciado basado en posición
             if (index > 0) {
-                const spacing = this.calculateSpacing(lastX, currentX, item);
+                const spacing = this.calculateSpacing(lastX + lastWidth, currentX, item);
                 lineText += spacing;
             }
             
             lineText += text;
-            lastX = currentX + this.estimateTextWidth(text);
+            lastX = currentX;
+            lastWidth = this.estimateTextWidth(text, item);
         });
         
-        return lineText.trim();
+        return lineText;
     }
 
     /**
-     * Calcula espaciado entre elementos de texto
+     * Calcula espaciado entre elementos con lógica mejorada
      */
-    calculateSpacing(lastX, currentX, item) {
-        if (!this.config.preserveSpacing) return ' ';
-        
-        const gap = currentX - lastX;
+    calculateSpacing(lastEnd, currentX, item) {
+        const gap = currentX - lastEnd;
         const charWidth = this.estimateCharWidth(item);
         
-        if (gap > charWidth * 3) {
+        if (gap > charWidth * 2) {
             // Gap grande - múltiples espacios
-            const spaces = Math.min(Math.floor(gap / charWidth), 10);
+            const spaces = Math.min(Math.floor(gap / charWidth), 8);
             return ' '.repeat(Math.max(1, spaces));
-        } else if (gap > charWidth * 0.5) {
+        } else if (gap > charWidth * 0.3) {
             // Gap normal - un espacio
             return ' ';
         } else {
-            // Sin gap - no agregar espacio
+            // Sin gap significativo
             return '';
         }
+    }
+
+    /**
+     * Estima ancho de texto con mayor precisión
+     */
+    estimateTextWidth(text, textItem) {
+        const fontSize = textItem.transform[0] || 12;
+        const scale = textItem.transform[3] || 1;
+        const avgCharWidth = fontSize * scale * 0.6;
+        return text.length * avgCharWidth;
     }
 
     /**
      * Estima ancho de carácter
      */
     estimateCharWidth(textItem) {
-        // Estimación basada en el tamaño de fuente
         const fontSize = textItem.transform[0] || 12;
-        return fontSize * 0.6; // Aproximación
-    }
-
-    /**
-     * Estima ancho de texto
-     */
-    estimateTextWidth(text) {
-        // Estimación simple - mejorar en futuras versiones
-        return text.length * 7; // 7 píxeles por carácter promedio
+        const scale = textItem.transform[3] || 1;
+        return fontSize * scale * 0.6;
     }
 
     /**
@@ -280,24 +518,24 @@ class PDFTextExtractor {
     postProcessText(text) {
         let processed = text;
         
-        if (this.config.normalizeWhitespace) {
-            // Normalizar espacios en blanco
-            processed = processed.replace(/\s+/g, ' ');
-        }
+        // Limpiar caracteres problemáticos primero
+        processed = this.cleanText(processed);
         
         if (this.config.mergeLines) {
             // Unir líneas que están fragmentadas
             processed = this.mergeFragmentedLines(processed);
         }
         
-        // Limpiar caracteres problemáticos
-        processed = this.cleanText(processed);
+        if (this.config.normalizeWhitespace) {
+            // Normalizar espacios en blanco
+            processed = processed.replace(/\s+/g, ' ');
+        }
         
         return processed.trim();
     }
 
     /**
-     * Une líneas fragmentadas
+     * Une líneas fragmentadas con lógica mejorada
      */
     mergeFragmentedLines(text) {
         const lines = text.split('\n');
@@ -306,11 +544,23 @@ class PDFTextExtractor {
         for (let i = 0; i < lines.length; i++) {
             let currentLine = lines[i].trim();
             
+            if (!currentLine) {
+                // Línea vacía - agregar si no es consecutiva
+                if (i > 0 && mergedLines[mergedLines.length - 1]) {
+                    mergedLines.push('');
+                }
+                continue;
+            }
+            
             // Verificar si la línea anterior termina de manera incompleta
             if (i > 0 && this.shouldMergeWithPrevious(currentLine, lines[i - 1])) {
                 // Unir con línea anterior
                 const lastIndex = mergedLines.length - 1;
-                mergedLines[lastIndex] = mergedLines[lastIndex] + ' ' + currentLine;
+                if (lastIndex >= 0) {
+                    mergedLines[lastIndex] = mergedLines[lastIndex] + ' ' + currentLine;
+                } else {
+                    mergedLines.push(currentLine);
+                }
             } else {
                 mergedLines.push(currentLine);
             }
@@ -326,14 +576,15 @@ class PDFTextExtractor {
         if (!currentLine || !previousLine) return false;
         
         const prevTrimmed = previousLine.trim();
+        const currTrimmed = currentLine.trim();
         
         // Si la línea anterior termina con guión
         if (prevTrimmed.endsWith('-')) return true;
         
         // Si la línea anterior es muy corta y no termina con puntuación
         if (prevTrimmed.length < 50 && !/[.!?:;]$/.test(prevTrimmed)) {
-            // Y la línea actual no empieza con mayúscula o acorde
-            if (!/^[A-Z]/.test(currentLine) && !/^[A-G][#b]?/.test(currentLine)) {
+            // Y la línea actual no empieza con mayúscula o acorde musical
+            if (!/^[A-Z]/.test(currTrimmed) && !/^[A-G][#b]?/.test(currTrimmed)) {
                 return true;
             }
         }
@@ -354,7 +605,8 @@ class PDFTextExtractor {
             .replace(/\u2026/g, '...')       // Ellipsis
             .replace(/\f/g, '\n')            // Form feed a newline
             .replace(/\r\n/g, '\n')          // Windows line endings
-            .replace(/\r/g, '\n');           // Mac line endings
+            .replace(/\r/g, '\n')            // Mac line endings
+            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ''); // Control characters
     }
 
     /**
@@ -391,108 +643,7 @@ class PDFTextExtractor {
      * Genera clave de cache para el blob
      */
     async generateCacheKey(blob) {
-        // Usar tamaño y tipo como clave simple
-        // En producción, considerar usar hash del contenido
         return `pdf_${blob.size}_${blob.type}_${Date.now()}`;
-    }
-
-    /**
-     * Extrae texto específico por coordenadas
-     */
-    async extractTextByRegion(pageNum, x, y, width, height) {
-        try {
-            const page = await this.currentDocument.getPage(pageNum);
-            const textContent = await page.getTextContent();
-            
-            const regionItems = textContent.items.filter(item => {
-                const itemX = item.transform[4];
-                const itemY = item.transform[5];
-                
-                return itemX >= x && itemX <= x + width &&
-                       itemY >= y && itemY <= y + height;
-            });
-            
-            return this.processTextItems(regionItems).text;
-            
-        } catch (error) {
-            console.error('❌ Error extrayendo región:', error);
-            return '';
-        }
-    }
-
-    /**
-     * Busca texto específico en el PDF
-     */
-    async searchText(searchTerm, caseSensitive = false) {
-        if (!this.currentDocument) return [];
-        
-        const results = [];
-        const searchRegex = new RegExp(
-            searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
-            caseSensitive ? 'g' : 'gi'
-        );
-        
-        for (let pageNum = 1; pageNum <= this.currentDocument.numPages; pageNum++) {
-            const pageData = await this.extractPage(pageNum);
-            const matches = pageData.text.matchAll(searchRegex);
-            
-            for (const match of matches) {
-                results.push({
-                    page: pageNum,
-                    text: match[0],
-                    index: match.index,
-                    context: this.getSearchContext(pageData.text, match.index, 50)
-                });
-            }
-        }
-        
-        return results;
-    }
-
-    /**
-     * Obtiene contexto alrededor de una búsqueda
-     */
-    getSearchContext(text, index, radius) {
-        const start = Math.max(0, index - radius);
-        const end = Math.min(text.length, index + radius);
-        return text.slice(start, end);
-    }
-
-    /**
-     * Obtiene estadísticas del texto extraído
-     */
-    getExtractionStats(extractedData) {
-        const text = extractedData.text;
-        
-        return {
-            totalCharacters: text.length,
-            totalWords: text.split(/\s+/).filter(w => w.length > 0).length,
-            totalLines: text.split('\n').length,
-            totalPages: extractedData.totalPages,
-            hasMetadata: Object.keys(extractedData.metadata || {}).length > 0,
-            averageWordsPerPage: Math.round(
-                text.split(/\s+/).filter(w => w.length > 0).length / extractedData.totalPages
-            ),
-            extractionTime: extractedData.extractedAt
-        };
-    }
-
-    /**
-     * Limpia cache de extracción
-     */
-    clearCache() {
-        this.extractionCache.clear();
-        console.log('🗑️ Cache de extracción limpiado');
-    }
-
-    /**
-     * Obtiene información del cache
-     */
-    getCacheInfo() {
-        return {
-            size: this.extractionCache.size,
-            keys: Array.from(this.extractionCache.keys())
-        };
     }
 
     /**
@@ -504,13 +655,30 @@ class PDFTextExtractor {
     }
 
     /**
-     * Cierra documento actual
+     * Limpia recursos
      */
-    closeDocument() {
+    async cleanup() {
         if (this.currentDocument) {
             this.currentDocument.destroy();
             this.currentDocument = null;
         }
+        
+        if (this.ocrWorker) {
+            await this.ocrWorker.terminate();
+            this.ocrWorker = null;
+        }
+    }
+
+    /**
+     * Obtiene estadísticas de extracción
+     */
+    getDebugInfo() {
+        return {
+            config: this.config,
+            hasDocument: !!this.currentDocument,
+            hasOCRWorker: !!this.ocrWorker,
+            cacheSize: this.extractionCache.size
+        };
     }
 }
 
