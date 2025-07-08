@@ -49,14 +49,20 @@ class PDFTextExtractor {
     }
 
     /**
-     * Carga Tesseract.js dinámicamente
+     * Carga Tesseract.js dinámicamente desde cdnjs.cloudflare.com
      */
     async loadTesseract() {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js';
-            script.onload = resolve;
-            script.onerror = reject;
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.4/tesseract.min.js';
+            script.onload = () => {
+                console.log('✅ Tesseract.js cargado desde cdnjs.cloudflare.com');
+                resolve();
+            };
+            script.onerror = () => {
+                console.error('❌ Error cargando Tesseract.js desde cdnjs.cloudflare.com');
+                reject(new Error('Error cargando Tesseract.js'));
+            };
             document.head.appendChild(script);
         });
     }
@@ -108,14 +114,30 @@ class PDFTextExtractor {
             // Extraer texto de todas las páginas con debugging
             const extractedData = await this.extractAllPagesWithDebugging();
             
-            // Si no se extrajo texto, intentar OCR fallback
-            if (extractedData.text.length === 0 && this.config.useOCRFallback) {
-                console.log('🤖 Texto vacío detectado, intentando OCR fallback...');
-                const ocrResult = await this.extractWithOCR();
-                if (ocrResult && ocrResult.text.length > 0) {
-                    extractedData.text = ocrResult.text;
-                    extractedData.pages = ocrResult.pages;
-                    extractedData.extractionMethod = 'OCR';
+            // Si no se extrajo texto, intentar OCR fallback o mostrar ayuda
+            if (extractedData.text.length === 0) {
+                if (this.config.useOCRFallback) {
+                    console.log('🤖 Texto vacío detectado, intentando OCR fallback...');
+                    try {
+                        const ocrResult = await this.extractWithOCR();
+                        if (ocrResult && ocrResult.text.length > 0) {
+                            extractedData.text = ocrResult.text;
+                            extractedData.pages = ocrResult.pages;
+                            extractedData.extractionMethod = 'OCR';
+                        } else {
+                            console.warn('🚫 OCR no pudo extraer texto útil');
+                            extractedData.extractionMethod = 'FAILED';
+                            extractedData.helpMessage = this.getHelpMessage();
+                        }
+                    } catch (ocrError) {
+                        console.warn('⚠️ OCR fallback falló:', ocrError.message);
+                        extractedData.extractionMethod = 'FAILED';
+                        extractedData.helpMessage = this.getHelpMessage();
+                    }
+                } else {
+                    console.warn('📄 Sin texto extraído y OCR desactivado');
+                    extractedData.extractionMethod = 'FAILED';
+                    extractedData.helpMessage = this.getHelpMessage();
                 }
             }
             
@@ -667,6 +689,27 @@ class PDFTextExtractor {
             await this.ocrWorker.terminate();
             this.ocrWorker = null;
         }
+    }
+
+    /**
+     * Obtiene mensaje de ayuda para PDFs sin texto extraíble
+     */
+    getHelpMessage() {
+        return {
+            title: "PDF con texto como imagen detectado",
+            description: "Este PDF contiene texto en formato de imagen que no puede ser extraído automáticamente.",
+            suggestions: [
+                "✏️ Verifica que el PDF tenga texto seleccionable (intenta seleccionar texto con el mouse)",
+                "🔄 Si el PDF es escaneado, considera convertirlo a texto usando herramientas OCR externas",
+                "📝 Como alternativa, puedes escribir los acordes manualmente en un editor de texto",
+                "🎼 El PDF se puede visualizar normalmente, pero la detección automática de acordes no funcionará"
+            ],
+            troubleshooting: {
+                textSelectable: "¿Puedes seleccionar texto en el PDF? Si no, es una imagen escaneada.",
+                ocrAvailable: "El OCR automático está " + (this.config.useOCRFallback ? "activado" : "desactivado"),
+                fileType: "Tipo de archivo procesado: PDF con contenido de imagen"
+            }
+        };
     }
 
     /**

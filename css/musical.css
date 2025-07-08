@@ -512,3 +512,70 @@
         max-width: calc(100vw - 2rem);
     }
 }
+.visual-only-message,
+    .error-recovery,
+    .no-chords-detected {
+        background: var(--dark-gray);
+        border-radius: var(--radius-lg);
+        padding: var(--spacing-xl);
+        text-align: center;
+        margin: var(--spacing-lg);
+    }
+
+    .message-header,
+    .error-header,
+    .no-chords-header {
+        margin-bottom: var(--spacing-lg);
+    }
+
+    .message-icon,
+    .error-icon,
+    .no-chords-icon {
+        font-size: 3rem;
+        display: block;
+        margin-bottom: var(--spacing-md);
+    }
+
+    .message-actions,
+    .error-actions,
+    .no-chords-actions {
+        display: flex;
+        gap: var(--spacing-md);
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: var(--spacing-lg);
+    }
+
+    .extracted-text-preview {
+        background: var(--primary-black);
+        border: 1px solid var(--medium-gray);
+        border-radius: var(--radius-md);
+        padding: var(--spacing-md);
+        margin: var(--spacing-md) 0;
+        text-align: left;
+    }
+
+    .extracted-text-preview pre {
+        color: var(--text-muted);
+        font-size: 0.9rem;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+
+    .chord-info {
+        background: var(--medium-gray);
+        color: var(--text-primary);
+        padding: var(--spacing-sm) var(--spacing-md);
+        border-radius: var(--radius-md);
+        font-size: 0.9rem;
+        margin: var(--spacing-md) 0;
+        text-align: center;
+    }
+
+    @media (max-width: 768px) {
+        .message-actions,
+        .error-actions,
+        .no-chords-actions {
+            flex-direction: column;
+        }
+    }

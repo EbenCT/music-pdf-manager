@@ -290,62 +290,391 @@ setupFileListEventDelegation(container) {
     /**
      * Procesa un archivo PDF
      */
-    async processFile(file) {
-        try {
-            this.state.isProcessing = true;
-            this.state.currentFile = file;
-            this.state.currentTransposition = 0;
-            
-            this.showProcessingStatus('Extrayendo texto del PDF...', 'processing');
+/**
+ * ACTUALIZACIÓN PARA MUSICAL-PROCESSOR.JS
+ * Integración con entrada manual de acordes
+ */
 
-            // Obtener PDF blob
-            const driveAPI = window.AppState?.driveAPI;
-            if (!driveAPI || !driveAPI.isSignedIn) {
-                throw new Error('No hay sesión activa de Google Drive');
-            }
+// Agrega estos métodos al final de la clase MusicalProcessor:
 
-            const blob = await driveAPI.downloadFileBlob(file.id);
-            
-            this.showProcessingStatus('Procesando contenido musical...', 'processing');
+/**
+ * Procesa un archivo PDF con manejo de errores mejorado
+ */
+async processFile(file) {
+    try {
+        this.state.isProcessing = true;
+        this.state.currentFile = file;
+        this.state.currentChords = [];
+        this.state.detectedKey = null;
 
-            // Extraer texto con posiciones
-            const extractedData = await this.textExtractor.extractFromBlob(blob);
-            this.state.originalText = extractedData.text;
-            
-            this.showProcessingStatus('Detectando acordes...', 'processing');
-
-            // Detectar acordes
-            this.state.detectedChords = this.chordDetector.detectChords(
-                this.state.originalText, 
-                this.state.config
-            );
-            
-            // Detectar tonalidad original
-            this.state.originalKey = this.chordDetector.detectKey(this.state.detectedChords);
-            this.state.transposedKey = this.state.originalKey;
-            
-            console.log(`🎵 Detectados ${this.state.detectedChords.length} acordes`);
-            console.log(`🎯 Tonalidad detectada: ${this.state.originalKey || 'No detectada'}`);
-            
-            // Renderizar contenido
-            this.renderMusicalContent();
-            
-            // Mostrar panel de transposición
-            this.showTranspositionPanel();
-            
-            // Actualizar información
-            this.updateChordInfo();
-            
-            this.hideProcessingStatus();
-            
-        } catch (error) {
-            console.error('❌ Error procesando archivo:', error);
-            this.showError('Error procesando el archivo musical: ' + error.message);
-            this.hideProcessingStatus();
-        } finally {
-            this.state.isProcessing = false;
+        console.log(`🎯 Seleccionando archivo: ${file.id}`);
+        
+        // Descargar archivo desde Google Drive
+        const blob = await this.downloadFileBlob(file);
+        
+        // Extraer texto con debugging mejorado
+        const extractedData = await this.textExtractor.extractFromBlob(blob);
+        
+        // Verificar si la extracción fue exitosa
+        if (extractedData.text.length === 0) {
+            console.warn('📄 No se pudo extraer texto del PDF');
+            await this.handleExtractionFailure(extractedData, file);
+            return;
         }
+
+        // Procesar texto extraído normalmente
+        await this.processExtractedText(extractedData);
+        
+    } catch (error) {
+        console.error('❌ Error procesando archivo:', error);
+        this.showError('Error procesando archivo: ' + error.message);
+        await this.handleProcessingError(error, file);
+    } finally {
+        this.state.isProcessing = false;
+        this.hideProcessingStatus();
     }
+}
+
+/**
+ * Maneja fallos en la extracción de texto
+ */
+async handleExtractionFailure(extractedData, file) {
+    const method = extractedData.extractionMethod || 'UNKNOWN';
+    
+    console.log(`🔍 Método de extracción: ${method}`);
+    
+    switch (method) {
+        case 'OCR':
+            // OCR exitoso pero sin acordes detectados
+            console.log('🤖 OCR completado pero sin acordes detectados');
+            this.showOCRNoChords(extractedData);
+            break;
+            
+        case 'FAILED':
+            // Extracción completamente fallida
+            console.log('🚫 Extracción fallida - mostrando entrada manual');
+            await this.showManualInput(extractedData, file);
+            break;
+            
+        default:
+            // Método desconocido
+            console.log('❓ Método de extracción desconocido');
+            await this.showManualInput(extractedData, file);
+    }
+}
+
+/**
+ * Muestra entrada manual de acordes
+ */
+async showManualInput(extractedData, file) {
+    // Inicializar componente de entrada manual si no existe
+    if (!window.manualChordInput) {
+        console.log('🎼 Inicializando entrada manual de acordes...');
+        window.manualChordInput = new ManualChordInput();
+    }
+
+    // Mostrar información del archivo
+    this.showFileInfo({
+        ...file,
+        extractionInfo: {
+            method: extractedData.extractionMethod,
+            helpMessage: extractedData.helpMessage,
+            textLength: extractedData.text.length
+        }
+    });
+
+    // Mostrar modal de entrada manual
+    return new Promise((resolve) => {
+        window.manualChordInput.show((result) => {
+            console.log('🎵 Resultado de entrada manual:', result);
+            
+            if (result.extractionMethod === 'MANUAL') {
+                // Procesar acordes manuales
+                this.processManualChords(result);
+            } else if (result.extractionMethod === 'SKIPPED') {
+                // Solo mostrar PDF sin funciones musicales
+                this.showPDFOnly(file);
+            }
+            
+            resolve(result);
+        });
+    });
+}
+
+/**
+ * Procesa acordes ingresados manualmente
+ */
+processManualChords(manualResult) {
+    try {
+        console.log('🎼 Procesando acordes manuales...');
+        
+        // Actualizar estado
+        this.state.currentChords = manualResult.chords;
+        this.state.detectedKey = this.detectKeyFromChords(manualResult.chords);
+        this.state.extractionMethod = 'MANUAL';
+        
+        // Mostrar información
+        this.showChordInfo(manualResult.chords, this.state.detectedKey);
+        
+        // Renderizar contenido
+        const renderedContent = this.renderer.render(
+            manualResult.text,
+            manualResult.chords,
+            { highlightChords: true, showManualBadge: true }
+        );
+        
+        this.updateContent(renderedContent);
+        
+        // Mostrar controles de transposición
+        this.showTranspositionControls();
+        
+        // Mostrar mensaje de éxito
+        this.showProcessingStatus('Acordes procesados exitosamente', 'success');
+        
+        setTimeout(() => {
+            this.hideProcessingStatus();
+        }, 3000);
+        
+    } catch (error) {
+        console.error('❌ Error procesando acordes manuales:', error);
+        this.showError('Error procesando acordes manuales: ' + error.message);
+    }
+}
+
+/**
+ * Muestra PDF solo para visualización
+ */
+showPDFOnly(file) {
+    console.log('👁️ Mostrando PDF solo para visualización');
+    
+    // Limpiar estado musical
+    this.state.currentChords = [];
+    this.state.detectedKey = null;
+    this.state.extractionMethod = 'VISUAL_ONLY';
+    
+    // Mostrar mensaje informativo
+    const content = `
+        <div class="visual-only-message">
+            <div class="message-header">
+                <span class="message-icon">👁️</span>
+                <h3>Modo Solo Visualización</h3>
+            </div>
+            <div class="message-content">
+                <p>Este PDF se muestra solo para lectura. Las funciones de detección y transposición de acordes no están disponibles.</p>
+                <div class="message-actions">
+                    <button class="control-btn" onclick="window.manualChordInput?.show()">
+                        🎼 Agregar Acordes Manualmente
+                    </button>
+                    <button class="control-btn" onclick="location.reload()">
+                        🔄 Intentar con Otro Archivo
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    this.updateContent(content);
+    
+    // Ocultar controles de transposición
+    this.hideTranspositionControls();
+    
+    // Mostrar información del archivo
+    this.showFileInfo({
+        ...file,
+        mode: 'visual_only',
+        message: 'Modo solo visualización activo'
+    });
+}
+
+/**
+ * Maneja errores de procesamiento
+ */
+async handleProcessingError(error, file) {
+    console.error('🚨 Error crítico en procesamiento:', error);
+    
+    // Mostrar opciones de recuperación
+    const errorContent = `
+        <div class="error-recovery">
+            <div class="error-header">
+                <span class="error-icon">🚨</span>
+                <h3>Error Procesando Archivo</h3>
+            </div>
+            <div class="error-content">
+                <p><strong>Error:</strong> ${error.message}</p>
+                <p>Opciones disponibles:</p>
+                <div class="error-actions">
+                    <button class="control-btn" onclick="this.retryProcessing('${file.id}')">
+                        🔄 Reintentar
+                    </button>
+                    <button class="control-btn" onclick="window.manualChordInput?.show()">
+                        ✏️ Entrada Manual
+                    </button>
+                    <button class="control-btn" onclick="this.selectDifferentFile()">
+                        📄 Otro Archivo
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    this.updateContent(errorContent);
+}
+
+/**
+ * Procesa texto extraído exitosamente
+ */
+async processExtractedText(extractedData) {
+    console.log(`📄 Procesando texto extraído: ${extractedData.text.length} caracteres`);
+    
+    // Detectar acordes
+    const chords = this.chordDetector.detect(extractedData.text);
+    console.log(`🎵 Detectados ${chords.length} acordes`);
+    
+    if (chords.length === 0) {
+        console.warn('⚠️ No se detectaron acordes en el texto');
+        await this.handleNoChords(extractedData);
+        return;
+    }
+    
+    // Detectar tonalidad
+    const detectedKey = this.chordDetector.detectKey(chords);
+    console.log(`🎯 Tonalidad detectada: ${detectedKey || 'No detectada'}`);
+    
+    // Actualizar estado
+    this.state.currentChords = chords;
+    this.state.detectedKey = detectedKey;
+    this.state.extractionMethod = extractedData.extractionMethod;
+    
+    // Mostrar información
+    this.showChordInfo(chords, detectedKey);
+    
+    // Renderizar contenido
+    const renderedContent = this.renderer.render(
+        extractedData.text,
+        chords,
+        { highlightChords: true }
+    );
+    
+    this.updateContent(renderedContent);
+    this.showTranspositionControls();
+    
+    this.showProcessingStatus('Acordes detectados exitosamente', 'success');
+    setTimeout(() => {
+        this.hideProcessingStatus();
+    }, 3000);
+}
+
+/**
+ * Maneja casos donde no se detectan acordes
+ */
+async handleNoChords(extractedData) {
+    console.log('🔍 Texto extraído pero sin acordes detectados');
+    
+    const noChordContent = `
+        <div class="no-chords-detected">
+            <div class="no-chords-header">
+                <span class="no-chords-icon">🎼</span>
+                <h3>Texto Extraído - Sin Acordes Detectados</h3>
+            </div>
+            <div class="no-chords-content">
+                <p>Se extrajo texto del PDF pero no se detectaron acordes automáticamente.</p>
+                <div class="extracted-text-preview">
+                    <h4>📄 Vista Previa del Texto:</h4>
+                    <pre>${extractedData.text.substring(0, 300)}${extractedData.text.length > 300 ? '...' : ''}</pre>
+                </div>
+                <div class="no-chords-actions">
+                    <button class="control-btn" onclick="window.manualChordInput?.show()">
+                        ✏️ Agregar Acordes Manualmente
+                    </button>
+                    <button class="control-btn" onclick="this.adjustChordDetection()">
+                        ⚙️ Ajustar Detección
+                    </button>
+                    <button class="control-btn" onclick="this.showPDFOnly(this.state.currentFile)">
+                        👁️ Solo Visualizar
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    this.updateContent(noChordContent);
+    this.hideTranspositionControls();
+}
+
+/**
+ * Detecta tonalidad desde acordes manuales
+ */
+detectKeyFromChords(chords) {
+    if (!chords || chords.length === 0) return null;
+    
+    // Usar el detector de acordes existente
+    const chordObjects = chords.map(chord => ({
+        note: typeof chord === 'string' ? chord.replace(/[^A-G#b]/g, '') : chord.note,
+        suffix: typeof chord === 'string' ? chord.replace(/^[A-G][#b]?/, '') : chord.suffix
+    }));
+    
+    return this.chordDetector.detectKey(chordObjects);
+}
+
+/**
+ * Muestra información de acordes detectados
+ */
+showChordInfo(chords, detectedKey) {
+    const info = `
+        <div class="chord-info">
+            🎵 ${chords.length} acordes detectados
+            ${detectedKey ? `| 🎯 Tonalidad: ${detectedKey}` : ''}
+            ${this.state.extractionMethod ? `| 🔧 Método: ${this.state.extractionMethod}` : ''}
+        </div>
+    `;
+    
+    // Mostrar en el panel de estado si existe
+    const statusPanel = document.getElementById('musical-status');
+    if (statusPanel) {
+        statusPanel.innerHTML = info;
+        statusPanel.style.display = 'block';
+    }
+}
+
+/**
+ * Reintenta el procesamiento
+ */
+async retryProcessing(fileId) {
+    const file = this.availableFiles.find(f => f.id === fileId);
+    if (file) {
+        console.log('🔄 Reintentando procesamiento...');
+        await this.selectFile(fileId);
+    }
+}
+
+/**
+ * Permite seleccionar un archivo diferente
+ */
+selectDifferentFile() {
+    // Limpiar estado actual
+    this.state.currentFile = null;
+    this.state.currentChords = [];
+    this.state.detectedKey = null;
+    
+    // Mostrar placeholder
+    this.showPlaceholder();
+    
+    console.log('📄 Listo para seleccionar un archivo diferente');
+}
+
+/**
+ * Ajusta la configuración de detección de acordes
+ */
+adjustChordDetection() {
+    // Abrir modal de configuración si existe
+    const configModal = document.getElementById('musical-config-modal');
+    if (configModal) {
+        configModal.style.display = 'flex';
+    } else {
+        console.log('⚙️ Modal de configuración no disponible');
+        alert('Funcionalidad de configuración no disponible en esta versión');
+    }
+}
 
     /**
      * Renderiza el contenido musical con acordes resaltados
