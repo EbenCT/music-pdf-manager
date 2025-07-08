@@ -144,9 +144,12 @@ class MusicalProcessor {
     /**
      * Renderiza la lista de archivos
      */
-    renderFileList() {
+ renderFileList() {
         const container = document.getElementById('musical-file-list');
-        if (!container) return;
+        if (!container) {
+            console.warn('⚠️ Contenedor de lista de archivos no encontrado');
+            return;
+        }
 
         if (this.filteredFiles.length === 0) {
             const isSearching = this.searchQuery.length > 0;
@@ -300,9 +303,36 @@ class MusicalProcessor {
     /**
      * Renderiza el contenido musical con acordes resaltados
      */
-    renderMusicalContent() {
+renderMusicalContent() {
         const container = document.getElementById('musical-content');
-        if (!container || !this.state.originalText) return;
+        if (!container) {
+            console.warn('⚠️ Contenedor de contenido musical no encontrado');
+            return;
+        }
+        
+        if (!this.state.originalText) {
+            container.innerHTML = `
+                <div class="placeholder">
+                    <div class="placeholder-icon">🎼</div>
+                    <p>Selecciona un archivo de instrumentos para ver los acordes</p>
+                    <div class="musical-features">
+                        <div class="feature-item">
+                            <span class="feature-icon">🎯</span>
+                            <span>Detección automática de acordes</span>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon">🎵</span>
+                            <span>Transposición en tiempo real</span>
+                        </div>
+                        <div class="feature-item">
+                            <span class="feature-icon">🎨</span>
+                            <span>Resaltado de acordes</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            return;
+        }
 
         // Renderizar con acordes resaltados
         const renderedHTML = this.musicalRenderer.render(
@@ -558,14 +588,34 @@ class MusicalProcessor {
     applyConfiguration() {
         const config = this.state.config;
         
-        // Aplicar a elementos del DOM
-        document.getElementById('detect-complex-chords').checked = config.detectComplexChords;
-        document.getElementById('highlight-bass-notes').checked = config.highlightBassNotes;
-        document.getElementById('chord-style').value = config.chordStyle;
-        document.getElementById('font-size').value = config.fontSize;
-        document.getElementById('font-size-value').textContent = config.fontSize + 'px';
+        // Aplicar a elementos del DOM solo si existen
+        const detectComplexElement = document.getElementById('detect-complex-chords');
+        if (detectComplexElement) {
+            detectComplexElement.checked = config.detectComplexChords;
+        }
+        
+        const highlightBassElement = document.getElementById('highlight-bass-notes');
+        if (highlightBassElement) {
+            highlightBassElement.checked = config.highlightBassNotes;
+        }
+        
+        const chordStyleElement = document.getElementById('chord-style');
+        if (chordStyleElement) {
+            chordStyleElement.value = config.chordStyle;
+        }
+        
+        const fontSizeElement = document.getElementById('font-size');
+        if (fontSizeElement) {
+            fontSizeElement.value = config.fontSize;
+        }
+        
+        const fontSizeValueElement = document.getElementById('font-size-value');
+        if (fontSizeValueElement) {
+            fontSizeValueElement.textContent = config.fontSize + 'px';
+        }
+        
+        console.log('⚙️ Configuración aplicada:', config);
     }
-
     /**
      * Actualiza preview de configuración
      */
@@ -578,11 +628,17 @@ class MusicalProcessor {
      * Aplica configuración desde modal
      */
     applyConfig() {
+        // Solo leer configuración si los elementos existen
+        const detectComplexElement = document.getElementById('detect-complex-chords');
+        const highlightBassElement = document.getElementById('highlight-bass-notes');
+        const chordStyleElement = document.getElementById('chord-style');
+        const fontSizeElement = document.getElementById('font-size');
+
         this.state.config = {
-            detectComplexChords: document.getElementById('detect-complex-chords').checked,
-            highlightBassNotes: document.getElementById('highlight-bass-notes').checked,
-            chordStyle: document.getElementById('chord-style').value,
-            fontSize: parseInt(document.getElementById('font-size').value)
+            detectComplexChords: detectComplexElement ? detectComplexElement.checked : this.state.config.detectComplexChords,
+            highlightBassNotes: highlightBassElement ? highlightBassElement.checked : this.state.config.highlightBassNotes,
+            chordStyle: chordStyleElement ? chordStyleElement.value : this.state.config.chordStyle,
+            fontSize: fontSizeElement ? parseInt(fontSizeElement.value) : this.state.config.fontSize
         };
 
         // Re-renderizar si hay contenido
@@ -615,6 +671,9 @@ class MusicalProcessor {
         const modal = document.getElementById('musical-config-modal');
         if (modal) {
             modal.classList.add('show');
+        } else {
+            console.warn('⚠️ Modal de configuración no disponible - HTML del módulo musical no cargado');
+            this.showError('Configuración no disponible. El módulo musical necesita ser cargado completamente.');
         }
     }
 
