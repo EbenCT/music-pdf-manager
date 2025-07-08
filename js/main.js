@@ -215,7 +215,7 @@ async loadModuleContent(moduleName) {
                 break;
                 
             case 'musical':
-                // 🎼 CORRECCIÓN: Cargar HTML del módulo musical dinámicamente
+                // 🎼 CORRECCIÓN COMPLETA: Cargar HTML del módulo musical dinámicamente
                 const musicalResponse = await fetch('modules/musical.html');
                 if (!musicalResponse.ok) {
                     throw new Error(`Error cargando módulo musical: ${musicalResponse.statusText}`);
@@ -225,13 +225,8 @@ async loadModuleContent(moduleName) {
                 moduleContainer.innerHTML = musicalHtml;
                 AppState.loadedModules.add('musical');
                 
-                // Ahora sí activar el módulo musical después de cargar el HTML
-                if (window.MusicalModule && typeof window.MusicalModule.activate === 'function') {
-                    // Pequeño delay para asegurar que el DOM esté listo
-                    setTimeout(() => {
-                        window.MusicalModule.activate();
-                    }, 100);
-                }
+                // ⭐ VALIDAR que las funciones estén disponibles antes de activar
+                await this.validateAndActivateMusicalModule();
                 break;
                 
             case 'visualizer':
@@ -256,6 +251,82 @@ async loadModuleContent(moduleName) {
         
         console.error(`❌ Error cargando módulo ${moduleName}:`, error);
     }
+}
+
+// ⭐ NUEVA FUNCIÓN: Validar y activar módulo musical
+async validateAndActivateMusicalModule() {
+    const maxRetries = 10;
+    let retries = 0;
+    
+    const waitForMusicalModule = () => {
+        return new Promise((resolve, reject) => {
+            const checkModule = () => {
+                if (window.MusicalModule && 
+                    typeof window.MusicalModule.activate === 'function' &&
+                    typeof window.MusicalModule.selectFile === 'function' &&
+                    typeof window.MusicalModule.refreshFileList === 'function') {
+                    
+                    console.log('✅ MusicalModule completamente disponible');
+                    resolve();
+                } else if (retries < maxRetries) {
+                    retries++;
+                    console.log(`⏳ Esperando MusicalModule... intento ${retries}/${maxRetries}`);
+                    setTimeout(checkModule, 100);
+                } else {
+                    reject(new Error('MusicalModule no pudo inicializarse después de múltiples intentos'));
+                }
+            };
+            checkModule();
+        });
+    };
+
+    try {
+        // Esperar a que el módulo esté completamente disponible
+        await waitForMusicalModule();
+        
+        // Ahora activar el módulo musical
+        await window.MusicalModule.activate();
+        
+        console.log('🎼 Módulo musical activado exitosamente');
+        
+    } catch (error) {
+        console.error('❌ Error validando/activando módulo musical:', error);
+        
+        // Mostrar mensaje de error en el contenedor
+        const moduleContainer = document.getElementById('musical-module');
+        if (moduleContainer) {
+            moduleContainer.innerHTML = `
+                <div class="module-header">
+                    <h2>🎼 Módulo Musical Instructivo</h2>
+                </div>
+                <div class="placeholder">
+                    <div class="placeholder-icon">⚠️</div>
+                    <h3>Error de Inicialización</h3>
+                    <p>${error.message}</p>
+                    <button class="btn" onclick="window.app.retryLoadModule('musical')">
+                        🔄 Reintentar
+                    </button>
+                </div>
+            `;
+        }
+    }
+}
+
+// ⭐ NUEVA FUNCIÓN: Reintentar carga de módulo
+async retryLoadModule(moduleName) {
+    console.log(`🔄 Reintentando carga del módulo: ${moduleName}`);
+    
+    // Limpiar estado del módulo
+    AppState.loadedModules.delete(moduleName);
+    
+    // Limpiar contenido actual
+    const moduleContainer = document.getElementById(`${moduleName}-module`);
+    if (moduleContainer) {
+        moduleContainer.innerHTML = '<div class="loading">Cargando módulo...</div>';
+    }
+    
+    // Recargar módulo
+    await this.loadModuleContent(moduleName);
 }
 
     async retryLoadModule(moduleName) {

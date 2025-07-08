@@ -98,31 +98,46 @@ class MusicalProcessor {
     /**
      * Configura event listeners
      */
-    setupEventListeners() {
-        // Búsqueda de archivos
-        const searchInput = document.getElementById('musical-search-input');
-        if (searchInput) {
-            searchInput.addEventListener('input', (e) => {
-                this.handleSearch(e.target.value);
-            });
-        }
-
-        // Configuración modal
-        const configElements = document.querySelectorAll('#musical-config-modal input, #musical-config-modal select');
-        configElements.forEach(element => {
-            element.addEventListener('change', () => {
-                this.updateConfigPreview();
-            });
+setupEventListeners() {
+    // Búsqueda de archivos
+    const searchInput = document.getElementById('musical-search-input');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            this.handleSearch(e.target.value);
         });
-
-        // Font size slider
-        const fontSizeSlider = document.getElementById('font-size');
-        if (fontSizeSlider) {
-            fontSizeSlider.addEventListener('input', (e) => {
-                document.getElementById('font-size-value').textContent = e.target.value + 'px';
-            });
-        }
     }
+
+    // ⭐ BOTÓN DE REFRESH: Event delegation seguro
+    const musicalPanel = document.querySelector('.musical-panel');
+    if (musicalPanel) {
+        musicalPanel.addEventListener('click', (event) => {
+            const refreshBtn = event.target.closest('[data-action="refresh-files"]');
+            if (refreshBtn) {
+                console.log('🔄 Refrescando lista de archivos...');
+                this.loadInstrumentFiles();
+            }
+        });
+    }
+
+    // Configuración modal
+    const configElements = document.querySelectorAll('#musical-config-modal input, #musical-config-modal select');
+    configElements.forEach(element => {
+        element.addEventListener('change', () => {
+            this.updateConfigPreview();
+        });
+    });
+
+    // Font size slider
+    const fontSizeSlider = document.getElementById('font-size');
+    if (fontSizeSlider) {
+        fontSizeSlider.addEventListener('input', (e) => {
+            const valueDisplay = document.getElementById('font-size-value');
+            if (valueDisplay) {
+                valueDisplay.textContent = e.target.value + 'px';
+            }
+        });
+    }
+}
 
     /**
      * Carga archivos de instrumentos desde AppState
@@ -144,36 +159,68 @@ class MusicalProcessor {
     /**
      * Renderiza la lista de archivos
      */
- renderFileList() {
-        const container = document.getElementById('musical-file-list');
-        if (!container) {
-            console.warn('⚠️ Contenedor de lista de archivos no encontrado');
-            return;
-        }
-
-        if (this.filteredFiles.length === 0) {
-            const isSearching = this.searchQuery.length > 0;
-            container.innerHTML = `
-                <div class="placeholder">
-                    <div class="placeholder-icon">${isSearching ? '🔍' : '🎸'}</div>
-                    <p>${isSearching ? 'Sin resultados para tu búsqueda' : 'No hay archivos de instrumentos disponibles'}</p>
-                    <p style="font-size: 0.9rem; color: var(--text-muted);">
-                        ${isSearching ? 'Intenta con otros términos' : 'Verifica la conexión con Google Drive'}
-                    </p>
-                </div>
-            `;
-            return;
-        }
-
-        container.innerHTML = this.filteredFiles.map(file => `
-            <div class="musical-file-item" 
-                 data-file-id="${file.id}"
-                 onclick="MusicalModule.selectFile('${file.id}')">
-                <div class="musical-file-name">${this.highlightSearchTerms(file.name)}</div>
-                <div class="musical-file-meta">${file.size} • ${this.formatDate(file.modifiedTime)}</div>
-            </div>
-        `).join('');
+renderFileList() {
+    const container = document.getElementById('musical-file-list');
+    if (!container) {
+        console.warn('⚠️ Contenedor de lista de archivos no encontrado');
+        return;
     }
+
+    if (this.filteredFiles.length === 0) {
+        const isSearching = this.searchQuery.length > 0;
+        container.innerHTML = `
+            <div class="placeholder">
+                <div class="placeholder-icon">${isSearching ? '🔍' : '🎸'}</div>
+                <p>${isSearching ? 'Sin resultados para tu búsqueda' : 'No hay archivos de instrumentos disponibles'}</p>
+                <p style="font-size: 0.9rem; color: var(--text-muted);">
+                    ${isSearching ? 'Intenta con otros términos' : 'Verifica la conexión con Google Drive'}
+                </p>
+            </div>
+        `;
+        return;
+    }
+
+    // ⭐ RENDERIZADO SEGURO: Sin onclick inline, usando data attributes
+    container.innerHTML = this.filteredFiles.map(file => `
+        <div class="musical-file-item" 
+             data-file-id="${file.id}"
+             data-action="select-file">
+            <div class="musical-file-name">${this.highlightSearchTerms(file.name)}</div>
+            <div class="musical-file-meta">${file.size} • ${this.formatDate(file.modifiedTime)}</div>
+        </div>
+    `).join('');
+    
+    // ⭐ CONFIGURAR EVENT DELEGATION: Un solo listener para todo el contenedor
+    this.setupFileListEventDelegation(container);
+}
+
+/**
+ * ⭐ NUEVA FUNCIÓN: Configurar event delegation para la lista de archivos
+ */
+setupFileListEventDelegation(container) {
+    // Remover listener anterior si existe
+    if (container._musicalClickHandler) {
+        container.removeEventListener('click', container._musicalClickHandler);
+    }
+    
+    // Crear nuevo listener
+    const clickHandler = async (event) => {
+        const fileItem = event.target.closest('[data-action="select-file"]');
+        if (fileItem) {
+            const fileId = fileItem.getAttribute('data-file-id');
+            if (fileId) {
+                console.log(`🎯 Seleccionando archivo: ${fileId}`);
+                
+                // Llamar directamente al método local en lugar de la función global
+                await this.selectFile(fileId);
+            }
+        }
+    };
+    
+    // Guardar referencia al handler y agregar listener
+    container._musicalClickHandler = clickHandler;
+    container.addEventListener('click', clickHandler);
+}
 
     /**
      * Resalta términos de búsqueda

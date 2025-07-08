@@ -22,7 +22,8 @@
     <div class="musical-panel">
         <div class="panel-header">
             <h3>🎸 Archivos de Instrumentos</h3>
-            <button class="btn secondary small" onclick="MusicalModule.refreshFileList()">
+            <!-- ⭐ BOTÓN SEGURO: Sin onclick, usando data-action -->
+            <button class="btn secondary small" data-action="refresh-files">
                 🔄 Actualizar
             </button>
         </div>
@@ -42,66 +43,70 @@
         </div>
     </div>
 
-    <!-- Panel derecho: Visualizador musical -->
+    <!-- Panel derecho: Visor de contenido musical -->
     <div class="musical-viewer-panel">
-        <!-- Header con controles de transposición -->
         <div class="musical-viewer-header">
             <div class="file-info">
-                <h3 id="current-musical-file">Selecciona un archivo de acordes</h3>
+                <h3 id="current-file-title">Selecciona un archivo de acordes</h3>
                 <div class="musical-meta">
-                    <span id="chord-count">0 acordes</span>
-                    <span id="current-key">Tonalidad: N/A</span>
+                    <span id="chord-count">0 acordes detectados</span>
+                    <span id="current-key">Tonalidad: --</span>
+                    <span id="transposition-info">Sin transposición</span>
                 </div>
             </div>
             
             <!-- Panel de transposición -->
-            <div class="transposition-panel" id="transposition-panel" style="display: none;">
+            <div id="transposition-panel" class="transposition-panel">
                 <div class="transposition-title">
-                    <h4>🎼 Transposición</h4>
-                    <button class="btn secondary small" onclick="MusicalModule.resetTransposition()">
-                        🔄 Original
+                    <h4>🎵 Transposición</h4>
+                    <!-- ⭐ BOTÓN SEGURO: Sin onclick, usando data-action -->
+                    <button class="btn secondary small" data-action="open-config">
+                        ⚙️ Config
                     </button>
                 </div>
                 
                 <div class="transposition-controls">
-                    <button class="transpose-btn" data-semitones="1" onclick="MusicalModule.transpose(1)">
+                    <!-- ⭐ BOTONES SEGUROS: Sin onclick, usando data-action -->
+                    <button class="transpose-btn" data-action="transpose" data-semitones="1">
                         <span class="transpose-symbol">+1</span>
-                        <span class="transpose-label">Tono</span>
+                        <span class="transpose-label">tono</span>
                     </button>
-                    
-                    <button class="transpose-btn" data-semitones="0.5" onclick="MusicalModule.transpose(0.5)">
+                    <button class="transpose-btn" data-action="transpose" data-semitones="0.5">
                         <span class="transpose-symbol">+½</span>
-                        <span class="transpose-label">Semitono</span>
+                        <span class="transpose-label">semitono</span>
                     </button>
                     
                     <div class="current-transposition">
-                        <span class="transposition-value" id="transposition-value">0</span>
+                        <span class="transposition-value" id="current-transposition">0</span>
                         <span class="transposition-unit">semitonos</span>
                     </div>
                     
-                    <button class="transpose-btn" data-semitones="-0.5" onclick="MusicalModule.transpose(-0.5)">
+                    <button class="transpose-btn" data-action="transpose" data-semitones="-0.5">
                         <span class="transpose-symbol">-½</span>
-                        <span class="transpose-label">Semitono</span>
+                        <span class="transpose-label">semitono</span>
+                    </button>
+                    <button class="transpose-btn" data-action="transpose" data-semitones="-1">
+                        <span class="transpose-symbol">-1</span>
+                        <span class="transpose-label">tono</span>
                     </button>
                     
-                    <button class="transpose-btn" data-semitones="-1" onclick="MusicalModule.transpose(-1)">
-                        <span class="transpose-symbol">-1</span>
-                        <span class="transpose-label">Tono</span>
+                    <!-- ⭐ BOTÓN RESET SEGURO -->
+                    <button class="transpose-btn" data-action="reset-transposition" style="background: var(--accent-red-light); margin-left: var(--spacing-md);">
+                        <span class="transpose-symbol">↻</span>
+                        <span class="transpose-label">reset</span>
                     </button>
                 </div>
                 
-                <!-- Información adicional -->
                 <div class="transposition-info">
                     <div class="key-info">
-                        <span>Original: <strong id="original-key">-</strong></span>
-                        <span>Actual: <strong id="transposed-key">-</strong></span>
+                        <span>Original: <strong id="original-key">--</strong></span>
+                        <span>Actual: <strong id="transposed-key">--</strong></span>
                     </div>
                 </div>
             </div>
         </div>
-
-        <!-- Contenedor del texto musical -->
-        <div class="musical-content" id="musical-content">
+        
+        <div id="musical-content" class="musical-content">
             <div class="placeholder">
                 <div class="placeholder-icon">🎼</div>
                 <p>Selecciona un archivo de instrumentos para ver los acordes</p>
@@ -129,7 +134,8 @@
     <div class="loading-spinner config-content">
         <div class="config-header">
             <h3>⚙️ Configuración Musical</h3>
-            <button class="control-btn" onclick="MusicalModule.closeConfig()">✕</button>
+            <!-- ⭐ BOTÓN SEGURO: Sin onclick -->
+            <button class="control-btn" data-action="close-config">✕</button>
         </div>
         
         <div class="config-sections">
@@ -165,10 +171,11 @@
         </div>
         
         <div class="config-actions">
-            <button class="btn secondary" onclick="MusicalModule.resetConfig()">
+            <!-- ⭐ BOTONES SEGUROS: Sin onclick -->
+            <button class="btn secondary" data-action="reset-config">
                 🔄 Restaurar
             </button>
-            <button class="btn" onclick="MusicalModule.applyConfig()">
+            <button class="btn" data-action="apply-config">
                 ✅ Aplicar
             </button>
         </div>
