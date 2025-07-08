@@ -10,7 +10,7 @@ class ChordDetector {
         
         // Patrones de acordes básicos
         this.basicChordSuffixes = [
-            '', 'm', 'maj', 'min', 'dim', 'aug', 'sus2', 'sus4'
+            'm', 'maj', 'min', 'dim', 'aug', 'sus2', 'sus4'
         ];
         
         // Patrones de acordes extendidos
@@ -18,9 +18,9 @@ class ChordDetector {
             '2', '4', '5', '6', '7', '9', '11', '13',
             'maj7', 'min7', 'm7', 'maj9', 'min9', 'm9',
             'add2', 'add4', 'add9', 'add11',
-            'sus2', 'sus4', 'dim7', 'aug7', 'aug9',
+            'dim7', 'aug7', 'aug9',
             '7sus4', '9sus4', 'maj7sus4',
-            'dim', 'aug', '+', '°', 'ø',
+            '+', '°', 'ø',
             'b5', '#5', 'b9', '#9', '#11', 'b13'
         ];
         
@@ -49,28 +49,49 @@ class ChordDetector {
         // Crear patrón para todas las notas
         const notePattern = this.notes.join('|');
         
-        // Patrón para acordes básicos
-        const basicSuffixPattern = this.basicChordSuffixes.join('|');
+        // Combinar todos los sufijos de acordes (sin duplicados)
+        const allSuffixes = [
+            ...this.extendedChordSuffixes,
+            ...this.basicChordSuffixes
+        ];
         
-        // Patrón para acordes extendidos
-        const extendedSuffixPattern = this.extendedChordSuffixes.join('|');
+        // Eliminar duplicados y vacíos, ordenar por longitud (más largos primero)
+        const uniqueSuffixes = [...new Set(allSuffixes)]
+            .filter(suffix => suffix.length > 0)
+            .sort((a, b) => b.length - a.length);
+        
+        // Escapar caracteres especiales en los sufijos
+        const escapedSuffixes = uniqueSuffixes.map(suffix => 
+            suffix.replace(/[+°ø#]/g, '\\$&')
+        );
+        
+        // Crear patrón de sufijos (incluir opción vacía al final)
+        const suffixPattern = escapedSuffixes.length > 0 ? 
+            `(${escapedSuffixes.join('|')})?` : '()';
         
         // Patrón completo para acordes con nota de bajo opcional
         this.chordPattern = new RegExp(
             `\\b(${notePattern})` +                    // Nota fundamental
-            `(${extendedSuffixPattern}|${basicSuffixPattern})?` +  // Sufijo de acorde
+            suffixPattern +                            // Sufijo de acorde (opcional)
             `(?:\\/(${notePattern}))?` +               // Nota de bajo opcional (/E)
             `\\b`,
-            'g'
+            'gi'
         );
         
         // Patrón más estricto para evitar falsos positivos
         this.strictChordPattern = new RegExp(
             `(?:^|\\s)(${notePattern})` +
-            `(${extendedSuffixPattern}|${basicSuffixPattern})` +
+            `(${escapedSuffixes.join('|')})` +        // Sufijo obligatorio en modo estricto
             `(?:\\/(${notePattern}))?` +
-            `(?=\\s|$|[,.!?;:])`
+            `(?=\\s|$|[,.!?;:])`,
+            'gi'
         );
+        
+        console.log('🎯 Patrones de acordes inicializados:', {
+            notas: this.notes.length,
+            sufijos: uniqueSuffixes.length,
+            patrón: this.chordPattern.source.substring(0, 100) + '...'
+        });
     }
 
     /**
@@ -171,12 +192,7 @@ class ChordDetector {
             confidence -= 0.3;
         }
         
-        // Incrementar si está al inicio de línea o después de espacio
-        if (this.isAtGoodPosition(text, position)) {
-            confidence += 0.1;
-        }
-        
-        return Math.min(1.0, Math.max(0.0, confidence));
+        return Math.max(0, Math.min(1, confidence));
     }
 
     /**
@@ -191,7 +207,8 @@ class ChordDetector {
      */
     isKnownSuffix(suffix) {
         return this.basicChordSuffixes.includes(suffix) || 
-               this.extendedChordSuffixes.includes(suffix);
+               this.extendedChordSuffixes.includes(suffix) ||
+               suffix === '';
     }
 
     /**
@@ -207,117 +224,101 @@ class ChordDetector {
      * Verifica si el contexto tiene características musicales
      */
     hasMusicalContext(context) {
-        // Buscar otros acordes en el contexto
-        const otherChords = context.match(this.chordPattern);
-        return otherChords && otherChords.length > 1;
+        const musicalKeywords = ['intro', 'verso', 'coro', 'bridge', 'solo', 'estrofa'];
+        const hasKeywords = musicalKeywords.some(keyword => 
+            context.toLowerCase().includes(keyword)
+        );
+        
+        // Buscar otros acordes cercanos
+        const chordPattern = /\b[A-G][#b]?[a-z0-9]*\b/gi;
+        const matches = context.match(chordPattern);
+        
+        return hasKeywords || (matches && matches.length > 1);
     }
 
     /**
-     * Verifica si el acorde es parte de una palabra más larga
+     * Verifica si el acorde es parte de una palabra más grande
      */
     isPartOfWord(text, position, length) {
-        const before = text[position - 1];
-        const after = text[position + length];
+        const before = position > 0 ? text[position - 1] : ' ';
+        const after = position + length < text.length ? text[position + length] : ' ';
         
-        return (before && /[a-zA-Z]/.test(before)) || 
-               (after && /[a-zA-Z]/.test(after));
-    }
-
-    /**
-     * Verifica si el acorde está en una buena posición
-     */
-    isAtGoodPosition(text, position) {
-        const before = text[position - 1];
-        return !before || /[\s\n\r]/.test(before);
+        // Si está rodeado de letras, probablemente es parte de una palabra
+        return /[a-zA-Z]/.test(before) || /[a-zA-Z]/.test(after);
     }
 
     /**
      * Clasifica el tipo de acorde
      */
     classifyChordType(suffix) {
-        if (!suffix) return 'major';
+        if (!suffix || suffix === '') return 'major';
         if (suffix.includes('m') && !suffix.includes('maj')) return 'minor';
-        if (suffix.includes('dim') || suffix.includes('°')) return 'diminished';
+        if (suffix.includes('dim')) return 'diminished';
         if (suffix.includes('aug') || suffix.includes('+')) return 'augmented';
         if (suffix.includes('sus')) return 'suspended';
         if (suffix.includes('7') || suffix.includes('9') || suffix.includes('11') || suffix.includes('13')) return 'extended';
         if (suffix.includes('add')) return 'added';
-        return 'major';
+        return 'other';
     }
 
     /**
-     * Verifica si es un acorde complejo
+     * Determina si un acorde es complejo
      */
     isComplexChord(suffix) {
-        return suffix && (
-            suffix.includes('7') || suffix.includes('9') || 
-            suffix.includes('11') || suffix.includes('13') ||
-            suffix.includes('add') || suffix.includes('sus') ||
-            suffix.includes('dim') || suffix.includes('aug')
-        );
+        const complexIndicators = ['7', '9', '11', '13', 'add', 'sus', 'dim', 'aug', 'b5', '#5', 'b9', '#9', '#11', 'b13'];
+        return complexIndicators.some(indicator => suffix.includes(indicator));
     }
 
     /**
      * Filtra acordes duplicados y superpuestos
      */
     filterDuplicateChords(chords) {
-        // Ordenar por posición
-        chords.sort((a, b) => a.position - b.position);
-        
         const filtered = [];
-        let lastEnd = -1;
         
-        for (const chord of chords) {
-            // Evitar superposiciones
-            if (chord.position >= lastEnd) {
+        chords.forEach(chord => {
+            // Verificar si ya existe un acorde similar en la misma posición
+            const isDuplicate = filtered.some(existing => 
+                Math.abs(existing.position - chord.position) < 3 &&
+                existing.note === chord.note
+            );
+            
+            if (!isDuplicate) {
                 filtered.push(chord);
-                lastEnd = chord.position + chord.length;
             }
-        }
+        });
         
-        return filtered;
+        return filtered.sort((a, b) => a.position - b.position);
     }
 
     /**
-     * Detecta la tonalidad principal del texto
+     * Detecta la tonalidad de una progresión de acordes
      */
     detectKey(chords) {
-        if (!chords || chords.length === 0) return null;
+        if (chords.length < 3) return null;
         
-        console.log('🎯 Analizando tonalidad...');
-        
-        // Contar frecuencia de cada nota fundamental
-        const noteFrequency = {};
-        chords.forEach(chord => {
-            const note = chord.note;
-            noteFrequency[note] = (noteFrequency[note] || 0) + 1;
-        });
-        
-        // Analizar patrones de acordes por cada tonalidad posible
+        const chordNotes = chords.map(chord => chord.note);
         const keyScores = {};
         
-        for (const [key, pattern] of Object.entries(this.keyPatterns)) {
+        // Evaluar cada tonalidad posible
+        Object.entries(this.keyPatterns).forEach(([key, pattern]) => {
             let score = 0;
-            
-            // Puntuación por acordes que coinciden con el patrón
-            chords.forEach(chord => {
-                const chordName = chord.note + chord.suffix;
-                if (pattern.some(p => chordName.startsWith(p.replace('dim', 'dim')))) {
-                    score += 2;
-                }
-                if (pattern.includes(chord.note)) {
+            chordNotes.forEach(note => {
+                if (pattern.includes(note)) {
                     score += 1;
+                } else if (pattern.includes(note + 'm')) {
+                    score += 0.8;
                 }
             });
             
-            keyScores[key] = score;
-        }
+            keyScores[key] = score / chordNotes.length;
+        });
         
-        // Encontrar la tonalidad con mayor puntuación
+        // Obtener la tonalidad con mayor puntuación
         const detectedKey = Object.entries(keyScores)
-            .sort(([,a], [,b]) => b - a)[0];
+            .sort(([,a], [,b]) => b - a)
+            .filter(([,score]) => score > 0.6);
         
-        const result = detectedKey && detectedKey[1] > 0 ? detectedKey[0] : null;
+        const result = detectedKey.length > 0 ? detectedKey[0][0] : null;
         
         console.log(`🎵 Tonalidad detectada: ${result || 'No detectada'}`);
         console.log('📊 Puntuaciones:', keyScores);
@@ -465,3 +466,6 @@ class ChordDetector {
 
 // === EXPORTAR ===
 window.ChordDetector = ChordDetector;
+
+// DEBUG TEMPORAL - Verificar que se carga correctamente
+console.log('🎯 ChordDetector exportado:', typeof window.ChordDetector);
