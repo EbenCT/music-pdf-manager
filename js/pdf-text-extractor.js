@@ -1,6 +1,6 @@
 /**
  * MUSIC PDF MANAGER - PDF TEXT EXTRACTOR CORREGIDO
- * Solución para el problema de extracción de 0 caracteres
+ * Solución completa para problemas de extracción y OCR
  */
 
 class PDFTextExtractor {
@@ -11,145 +11,130 @@ class PDFTextExtractor {
             mergeLines: true,
             normalizeWhitespace: false,
             extractMetadata: true,
-            useOCRFallback: true,          // NUEVO: Usar OCR como fallback
-            ocrLanguage: 'eng+spa',        // NUEVO: Idiomas para OCR
-            debugMode: true                // NUEVO: Modo debug detallado
+            useOCRFallback: true,
+            ocrLanguage: 'eng+spa',
+            debugMode: true,
+            // NUEVO: Configuración de fallbacks
+            enableManualInput: true,
+            maxRetries: 3,
+            timeoutMs: 30000
         };
         
         this.currentDocument = null;
         this.extractionCache = new Map();
         this.ocrWorker = null;
+        this.ocrInitialized = false;
     }
 
     /**
-     * Inicializa Tesseract.js para OCR fallback
+     * ✅ CORREGIDO: Inicializa Tesseract.js desde cdnjs.cloudflare.com
      */
     async initializeOCR() {
-        if (this.ocrWorker) return this.ocrWorker;
+        if (this.ocrWorker && this.ocrInitialized) {
+            return this.ocrWorker;
+        }
         
         try {
-            // Cargar Tesseract.js dinámicamente
+            console.log('🤖 Inicializando OCR worker...');
+            
+            // SOLUCIÓN: Cargar desde cdnjs.cloudflare.com (permitido por CSP)
             if (typeof Tesseract === 'undefined') {
-                console.log('📥 Cargando Tesseract.js...');
-                await this.loadTesseract();
+                console.log('📥 Cargando Tesseract.js desde cdnjs.cloudflare.com...');
+                await this.loadTesseractFromCDNJS();
             }
             
-            console.log('🤖 Inicializando OCR worker...');
-            this.ocrWorker = await Tesseract.createWorker();
+            // Crear worker con configuración corregida
+            this.ocrWorker = await Tesseract.createWorker({
+                workerPath: 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.4/worker.min.js',
+                corePath: 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.4/tesseract-core.wasm.js'
+            });
+            
             await this.ocrWorker.loadLanguage(this.config.ocrLanguage);
             await this.ocrWorker.initialize(this.config.ocrLanguage);
             
-            console.log('✅ OCR worker inicializado');
+            this.ocrInitialized = true;
+            console.log('✅ OCR worker inicializado correctamente');
             return this.ocrWorker;
             
         } catch (error) {
             console.warn('⚠️ No se pudo inicializar OCR:', error.message);
+            this.ocrWorker = null;
+            this.ocrInitialized = false;
             return null;
         }
     }
 
     /**
-     * Carga Tesseract.js dinámicamente desde cdnjs.cloudflare.com
+     * ✅ NUEVO: Carga Tesseract.js desde cdnjs.cloudflare.com
      */
-    async loadTesseract() {
+    async loadTesseractFromCDNJS() {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
+            // CORREGIDO: Usar cdnjs.cloudflare.com en lugar de cdn.jsdelivr.net
             script.src = 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.4/tesseract.min.js';
+            script.crossOrigin = 'anonymous';
+            
             script.onload = () => {
                 console.log('✅ Tesseract.js cargado desde cdnjs.cloudflare.com');
                 resolve();
             };
-            script.onerror = () => {
-                console.error('❌ Error cargando Tesseract.js desde cdnjs.cloudflare.com');
+            
+            script.onerror = (error) => {
+                console.error('❌ Error cargando Tesseract.js desde cdnjs.cloudflare.com:', error);
                 reject(new Error('Error cargando Tesseract.js'));
             };
+            
             document.head.appendChild(script);
         });
     }
 
     /**
-     * Extrae texto de un blob PDF con debugging mejorado
+     * ✅ MEJORADO: Extracción principal con manejo robusto de errores
      */
-    async extractFromBlob(pdfBlob) {
+    async extractFromBlob(blob, fileName = 'unknown.pdf') {
+        if (!blob || blob.size === 0) {
+            throw new Error('Blob inválido o vacío');
+        }
+
+        console.log(`📄 Iniciando extracción de texto del PDF: ${fileName}...`);
+        
+        const cacheKey = await this.generateCacheKey(blob, fileName);
+        
+        // Verificar cache
+        if (this.extractionCache.has(cacheKey)) {
+            console.log('📋 Resultado encontrado en cache');
+            return this.extractionCache.get(cacheKey);
+        }
+
+        let result = {
+            text: '',
+            metadata: {},
+            extractionMethod: 'FAILED',
+            success: false,
+            helpMessage: null,
+            error: null
+        };
+
         try {
-            console.log('📄 Iniciando extracción de texto del PDF...');
+            // PASO 1: Intentar extracción directa de PDF
+            result = await this.extractDirectText(blob, fileName);
             
-            if (!pdfBlob || pdfBlob.type !== 'application/pdf') {
-                throw new Error('El archivo no es un PDF válido');
-            }
-
-            // Verificar PDF.js
-            if (typeof pdfjsLib === 'undefined') {
-                throw new Error('PDF.js no está disponible');
-            }
-
-            // Generar clave de cache
-            const cacheKey = await this.generateCacheKey(pdfBlob);
-            
-            // Verificar cache
-            if (this.extractionCache.has(cacheKey)) {
-                console.log('📋 Usando texto desde cache');
-                return this.extractionCache.get(cacheKey);
-            }
-
-            // Convertir blob a ArrayBuffer
-            const arrayBuffer = await pdfBlob.arrayBuffer();
-            
-            // Cargar documento PDF con configuración mejorada
-            const loadingTask = pdfjsLib.getDocument({
-                data: arrayBuffer,
-                verbosity: this.config.debugMode ? 1 : 0,
-                standardFontDataUrl: null,
-                enableXfa: true
-            });
-            
-            this.currentDocument = await loadingTask.promise;
-            
-            console.log(`📖 PDF cargado: ${this.currentDocument.numPages} páginas`);
-            
-            // Extraer metadata
-            const metadata = await this.extractMetadata();
-            console.log('📊 Metadata extraída:', metadata);
-            
-            // Extraer texto de todas las páginas con debugging
-            const extractedData = await this.extractAllPagesWithDebugging();
-            
-            // Si no se extrajo texto, intentar OCR fallback o mostrar ayuda
-            if (extractedData.text.length === 0) {
-                if (this.config.useOCRFallback) {
-                    console.log('🤖 Texto vacío detectado, intentando OCR fallback...');
-                    try {
-                        const ocrResult = await this.extractWithOCR();
-                        if (ocrResult && ocrResult.text.length > 0) {
-                            extractedData.text = ocrResult.text;
-                            extractedData.pages = ocrResult.pages;
-                            extractedData.extractionMethod = 'OCR';
-                        } else {
-                            console.warn('🚫 OCR no pudo extraer texto útil');
-                            extractedData.extractionMethod = 'FAILED';
-                            extractedData.helpMessage = this.getHelpMessage();
-                        }
-                    } catch (ocrError) {
-                        console.warn('⚠️ OCR fallback falló:', ocrError.message);
-                        extractedData.extractionMethod = 'FAILED';
-                        extractedData.helpMessage = this.getHelpMessage();
-                    }
+            // PASO 2: Si no hay texto, intentar OCR
+            if (result.text.length === 0 && this.config.useOCRFallback) {
+                console.log('🤖 Texto vacío detectado, intentando OCR fallback...');
+                const ocrResult = await this.extractWithOCR(blob, fileName);
+                
+                if (ocrResult.success) {
+                    result = ocrResult;
                 } else {
-                    console.warn('📄 Sin texto extraído y OCR desactivado');
-                    extractedData.extractionMethod = 'FAILED';
-                    extractedData.helpMessage = this.getHelpMessage();
+                    // PASO 3: Configurar para entrada manual
+                    result = await this.setupManualInput(blob, fileName, result);
                 }
+            } else if (result.text.length === 0) {
+                // OCR deshabilitado, configurar entrada manual
+                result = await this.setupManualInput(blob, fileName, result);
             }
-            
-            const result = {
-                text: extractedData.text,
-                pages: extractedData.pages,
-                metadata: metadata,
-                extractedAt: new Date().toISOString(),
-                totalPages: this.currentDocument.numPages,
-                extractionMethod: extractedData.extractionMethod || 'PDF.js'
-            };
-            
+
             // Guardar en cache
             this.extractionCache.set(cacheKey, result);
             
@@ -157,491 +142,299 @@ class PDFTextExtractor {
             console.log(`🔧 Método usado: ${result.extractionMethod}`);
             
             return result;
-            
+
         } catch (error) {
-            console.error('❌ Error en extracción de texto:', error);
-            throw new Error(`Error extrayendo texto del PDF: ${error.message}`);
+            console.error('❌ Error durante la extracción:', error);
+            result.error = error.message;
+            result.helpMessage = this.getErrorHelpMessage(error);
+            return result;
         }
     }
 
     /**
-     * Extrae texto con debugging detallado
+     * ✅ MEJORADO: Extracción directa de texto del PDF
      */
-    async extractAllPagesWithDebugging() {
-        const pages = [];
-        let combinedText = '';
-        
-        for (let pageNum = 1; pageNum <= this.currentDocument.numPages; pageNum++) {
-            console.log(`📄 Procesando página ${pageNum}/${this.currentDocument.numPages}`);
-            
-            const pageData = await this.extractPageWithDebugging(pageNum);
-            pages.push(pageData);
-            
-            // Combinar texto con separador de página
-            if (combinedText.length > 0) {
-                combinedText += '\n\n--- Página ' + pageNum + ' ---\n\n';
-            }
-            combinedText += pageData.text;
-        }
-        
-        return {
-            text: this.postProcessText(combinedText),
-            pages: pages
-        };
-    }
-
-    /**
-     * Extrae página con debugging detallado
-     */
-    async extractPageWithDebugging(pageNum) {
+    async extractDirectText(blob, fileName) {
         try {
-            const page = await this.currentDocument.getPage(pageNum);
+            const arrayBuffer = await blob.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({
+                data: arrayBuffer,
+                cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+                cMapPacked: true
+            }).promise;
+
+            console.log(`📖 PDF cargado: ${pdf.numPages} páginas`);
             
-            // DEBUG: Información de la página
-            console.log(`📋 Página ${pageNum} - Info:`, {
-                rotation: page.rotate,
-                userUnit: page.userUnit,
-                view: page.view
-            });
-            
-            const textContent = await page.getTextContent();
-            
-            // DEBUG: Información del contenido de texto
-            console.log(`🔍 Página ${pageNum} - TextContent:`, {
-                itemsCount: textContent.items.length,
-                styles: Object.keys(textContent.styles || {}).length
-            });
-            
-            // DEBUG: Mostrar primeros items si hay pocos
-            if (textContent.items.length <= 10) {
-                console.log(`📝 Página ${pageNum} - Items de texto:`, textContent.items);
+            // Extraer metadatos
+            const metadata = await this.extractMetadata(pdf);
+            console.log('📊 Metadata extraída:', metadata);
+
+            let fullText = '';
+            let totalItems = 0;
+
+            // Procesar cada página
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                console.log(`📄 Procesando página ${pageNum}/${pdf.numPages}`);
+                
+                const page = await pdf.getPage(pageNum);
+                const pageInfo = page.getViewport({ scale: 1 });
+                console.log(`📋 Página ${pageNum} - Info:`, {
+                    rotation: pageInfo.rotation,
+                    userUnit: pageInfo.userUnit,
+                    view: pageInfo.viewBox
+                });
+
+                const textContent = await page.getTextContent();
+                console.log(`🔍 Página ${pageNum} - TextContent:`, {
+                    itemsCount: textContent.items.length,
+                    styles: Object.keys(textContent.styles).length
+                });
+
+                console.log(`📝 Página ${pageNum} - Items de texto:`, textContent.items.map(item => ({
+                    text: item.str,
+                    hasTransform: !!item.transform,
+                    width: item.width,
+                    height: item.height
+                })));
+
+                const validItems = textContent.items.filter(item => 
+                    item.str && 
+                    item.str.trim().length > 0 && 
+                    !this.isSpecialCharacter(item.str)
+                );
+
+                console.log(`✓ Página ${pageNum} - Items válidos: ${validItems.length}/${textContent.items.length}`);
+
+                if (validItems.length === 0) {
+                    console.log(`⚠️ Página ${pageNum} - No hay items de texto válidos`);
+                    continue;
+                }
+
+                const pageText = this.processTextItems(validItems);
+                fullText += pageText + '\n';
+                totalItems += validItems.length;
+
+                console.log(`📏 Página ${pageNum} - Texto extraído: ${pageText.length} caracteres`);
             }
-            
-            // DEBUG: Verificar si hay items válidos
-            const validItems = textContent.items.filter(item => 
-                item.str && typeof item.str === 'string' && item.str.trim().length > 0
-            );
-            
-            console.log(`✓ Página ${pageNum} - Items válidos: ${validItems.length}/${textContent.items.length}`);
-            
-            // Procesar items de texto
-            const processedText = this.processTextItems(textContent.items);
-            
-            console.log(`📏 Página ${pageNum} - Texto extraído: ${processedText.text.length} caracteres`);
-            
+
+            // Limpiar documento
+            this.currentDocument = pdf;
+
+            if (fullText.trim().length === 0) {
+                console.log('⚠️ No se pudo extraer texto del PDF (posiblemente sea una imagen escaneada)');
+                return {
+                    text: '',
+                    metadata,
+                    extractionMethod: 'DIRECT_FAILED',
+                    success: false,
+                    helpMessage: 'El PDF no contiene texto extraíble. Posiblemente sea una imagen escaneada.',
+                    totalPages: pdf.numPages,
+                    totalItems: 0
+                };
+            }
+
             return {
-                pageNumber: pageNum,
-                text: processedText.text,
-                items: processedText.items,
-                itemsCount: textContent.items.length,
-                validItemsCount: validItems.length,
-                viewport: page.getViewport({ scale: 1.0 })
+                text: fullText.trim(),
+                metadata,
+                extractionMethod: 'DIRECT',
+                success: true,
+                totalPages: pdf.numPages,
+                totalItems
             };
-            
+
         } catch (error) {
-            console.error(`❌ Error procesando página ${pageNum}:`, error);
+            console.error('❌ Error en extracción directa:', error);
+            throw new Error(`Error procesando PDF: ${error.message}`);
+        }
+    }
+
+    /**
+     * ✅ CORREGIDO: Extracción con OCR usando configuración correcta
+     */
+    async extractWithOCR(blob, fileName) {
+        try {
+            const worker = await this.initializeOCR();
+            
+            if (!worker) {
+                throw new Error('OCR worker no disponible');
+            }
+
+            console.log('🤖 Iniciando OCR en el PDF...');
+            
+            // Convertir blob a imagen para OCR
+            const imageData = await this.convertPDFToImage(blob);
+            
+            if (!imageData) {
+                throw new Error('No se pudo convertir PDF a imagen');
+            }
+
+            // Realizar OCR
+            console.log('🔍 Ejecutando reconocimiento OCR...');
+            const { data: { text, confidence } } = await worker.recognize(imageData, {
+                tessedit_pageseg_mode: '1', // Automatic page segmentation with OSD
+                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789#♭♯majmindimsusadd ',
+            });
+
+            console.log(`🤖 OCR completado - Confianza: ${confidence}%`);
+            console.log(`📏 Texto extraído por OCR: ${text.length} caracteres`);
+
+            if (text.trim().length === 0) {
+                return {
+                    text: '',
+                    metadata: { ocrConfidence: confidence },
+                    extractionMethod: 'OCR_FAILED',
+                    success: false,
+                    helpMessage: 'OCR no pudo extraer texto útil del PDF.'
+                };
+            }
+
             return {
-                pageNumber: pageNum,
+                text: text.trim(),
+                metadata: { 
+                    ocrConfidence: confidence,
+                    ocrMethod: 'tesseract'
+                },
+                extractionMethod: 'OCR',
+                success: true
+            };
+
+        } catch (error) {
+            console.error('❌ Error en OCR fallback:', error);
+            return {
                 text: '',
-                items: [],
+                metadata: {},
+                extractionMethod: 'OCR_FAILED',
+                success: false,
+                helpMessage: `Error en OCR: ${error.message}`,
                 error: error.message
             };
         }
     }
 
     /**
-     * Extrae texto usando OCR como fallback
+     * ✅ NUEVO: Configurar entrada manual cuando falla la extracción automática
      */
-    async extractWithOCR() {
+    async setupManualInput(blob, fileName, previousResult) {
+        console.log('🚫 Extracción automática fallida - configurando entrada manual');
+        
+        return {
+            text: '',
+            metadata: previousResult.metadata || {},
+            extractionMethod: 'MANUAL_REQUIRED',
+            success: false,
+            helpMessage: this.getManualInputHelpMessage(),
+            requiresManualInput: true,
+            fileName,
+            blob
+        };
+    }
+
+    /**
+     * ✅ NUEVO: Convierte PDF a imagen para OCR
+     */
+    async convertPDFToImage(blob) {
         try {
-            const worker = await this.initializeOCR();
-            if (!worker) {
-                throw new Error('OCR worker no disponible');
-            }
+            const arrayBuffer = await blob.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            const page = await pdf.getPage(1); // Primera página
             
-            const pages = [];
-            let combinedText = '';
+            const scale = 2.0; // Mayor resolución para mejor OCR
+            const viewport = page.getViewport({ scale });
             
-            for (let pageNum = 1; pageNum <= this.currentDocument.numPages; pageNum++) {
-                console.log(`🤖 OCR - Procesando página ${pageNum}/${this.currentDocument.numPages}`);
-                
-                // Convertir página a imagen
-                const imageData = await this.renderPageToImage(pageNum);
-                
-                // Aplicar OCR
-                const { data: { text } } = await worker.recognize(imageData);
-                
-                console.log(`📖 OCR - Página ${pageNum}: ${text.length} caracteres extraídos`);
-                
-                pages.push({
-                    pageNumber: pageNum,
-                    text: text,
-                    method: 'OCR'
-                });
-                
-                if (combinedText.length > 0) {
-                    combinedText += '\n\n--- Página ' + pageNum + ' ---\n\n';
-                }
-                combinedText += text;
-            }
-            
-            return {
-                text: this.postProcessText(combinedText),
-                pages: pages
-            };
-            
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+
+            await page.render({
+                canvasContext: context,
+                viewport: viewport
+            }).promise;
+
+            return canvas;
+
         } catch (error) {
-            console.error('❌ Error en OCR fallback:', error);
+            console.error('❌ Error convirtiendo PDF a imagen:', error);
             return null;
         }
     }
 
     /**
-     * Renderiza página del PDF como imagen para OCR
+     * ✅ MEJORADO: Procesa items de texto con mejor espaciado
      */
-    async renderPageToImage(pageNum) {
-        const page = await this.currentDocument.getPage(pageNum);
-        
-        // Configurar viewport con escala alta para mejor OCR
-        const viewport = page.getViewport({ scale: 2.0 });
-        
-        // Crear canvas
-        const canvas = document.createElement('canvas');
-        const context = canvas.getContext('2d');
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-        
-        // Renderizar página en canvas
-        await page.render({
-            canvasContext: context,
-            viewport: viewport
-        }).promise;
-        
-        return canvas;
-    }
-
-    /**
-     * Procesa items de texto con debugging mejorado
-     */
-    processTextItems(textItems) {
-        if (!textItems || textItems.length === 0) {
-            console.log('⚠️ No hay items de texto para procesar');
-            return { text: '', items: [] };
-        }
-
-        console.log(`🔧 Procesando ${textItems.length} items de texto`);
-
-        // DEBUG: Analizar tipos de items
-        const itemAnalysis = this.analyzeTextItems(textItems);
-        console.log('📊 Análisis de items:', itemAnalysis);
-
-        // Filtrar items válidos
-        const validItems = textItems.filter(item => {
-            const isValid = item.str && 
-                           typeof item.str === 'string' && 
-                           item.str.trim().length > 0 &&
-                           item.transform &&
-                           Array.isArray(item.transform) &&
-                           item.transform.length >= 6;
-            
-            if (!isValid && this.config.debugMode) {
-                console.log('🚫 Item inválido:', item);
-            }
-            
-            return isValid;
-        });
-
-        console.log(`✓ Items válidos para procesamiento: ${validItems.length}/${textItems.length}`);
-
-        if (validItems.length === 0) {
-            console.log('⚠️ No hay items válidos para extraer texto');
-            return { text: '', items: [] };
-        }
-
-        // Organizar items por líneas basado en posición Y
-        const lines = this.organizeItemsByLines(validItems);
-        console.log(`📐 Organizados en ${lines.length} líneas`);
-        
-        // Procesar cada línea
-        const processedLines = lines.map((line, index) => {
-            const lineText = this.processLine(line);
-            if (this.config.debugMode && lineText.trim()) {
-                console.log(`📝 Línea ${index + 1}: "${lineText}"`);
-            }
-            return lineText;
-        });
-        
-        // Combinar líneas
-        const finalText = processedLines.join('\n');
-        
-        console.log(`📄 Texto final: ${finalText.length} caracteres`);
-        
-        return {
-            text: finalText,
-            items: validItems.map(item => this.processTextItem(item))
-        };
-    }
-
-    /**
-     * Analiza los items de texto para debugging
-     */
-    analyzeTextItems(items) {
-        const analysis = {
-            total: items.length,
-            withText: 0,
-            withTransform: 0,
-            withValidTransform: 0,
-            empty: 0,
-            sample: []
-        };
-
-        items.forEach((item, index) => {
-            if (item.str) analysis.withText++;
-            if (item.transform) analysis.withTransform++;
-            if (item.transform && Array.isArray(item.transform) && item.transform.length >= 6) {
-                analysis.withValidTransform++;
-            }
-            if (!item.str || item.str.trim().length === 0) analysis.empty++;
-            
-            // Recopilar muestra de los primeros 5 items
-            if (index < 5) {
-                analysis.sample.push({
-                    str: item.str,
-                    hasTransform: !!item.transform,
-                    transformLength: item.transform ? item.transform.length : 0
-                });
-            }
-        });
-
-        return analysis;
-    }
-
-    /**
-     * Organiza items por líneas con tolerancia mejorada
-     */
-    organizeItemsByLines(textItems) {
-        const lines = [];
-        const yTolerance = 3; // Tolerancia reducida para mayor precisión
-        
-        textItems.forEach(item => {
-            const y = item.transform[5]; // Posición Y
-            
-            // Buscar línea existente con Y similar
-            let targetLine = lines.find(line => 
-                Math.abs(line.y - y) <= yTolerance
-            );
-            
-            if (!targetLine) {
-                targetLine = { y: y, items: [] };
-                lines.push(targetLine);
-            }
-            
-            targetLine.items.push(item);
-        });
-        
-        // Ordenar líneas por Y (de arriba a abajo)
-        lines.sort((a, b) => b.y - a.y);
-        
-        // Ordenar items dentro de cada línea por X (de izquierda a derecha)
-        lines.forEach(line => {
-            line.items.sort((a, b) => a.transform[4] - b.transform[4]);
-        });
-        
-        return lines.map(line => line.items);
-    }
-
-    /**
-     * Procesa una línea de texto con espaciado mejorado
-     */
-    processLine(lineItems) {
-        if (!lineItems || lineItems.length === 0) return '';
-        
-        let lineText = '';
-        let lastX = 0;
-        let lastWidth = 0;
-        
-        lineItems.forEach((item, index) => {
-            const currentX = item.transform[4];
-            const text = item.str.trim();
-            
-            if (!text) return; // Saltar items vacíos
-            
-            // Calcular espaciado basado en posición
-            if (index > 0) {
-                const spacing = this.calculateSpacing(lastX + lastWidth, currentX, item);
-                lineText += spacing;
-            }
-            
-            lineText += text;
-            lastX = currentX;
-            lastWidth = this.estimateTextWidth(text, item);
-        });
-        
-        return lineText;
-    }
-
-    /**
-     * Calcula espaciado entre elementos con lógica mejorada
-     */
-    calculateSpacing(lastEnd, currentX, item) {
-        const gap = currentX - lastEnd;
-        const charWidth = this.estimateCharWidth(item);
-        
-        if (gap > charWidth * 2) {
-            // Gap grande - múltiples espacios
-            const spaces = Math.min(Math.floor(gap / charWidth), 8);
-            return ' '.repeat(Math.max(1, spaces));
-        } else if (gap > charWidth * 0.3) {
-            // Gap normal - un espacio
-            return ' ';
-        } else {
-            // Sin gap significativo
+    processTextItems(items) {
+        if (!items || items.length === 0) {
             return '';
         }
+
+        // Agrupar por líneas basado en coordenadas Y
+        const lines = this.groupTextItemsByLines(items);
+        
+        // Procesar cada línea
+        const processedLines = lines.map(line => {
+            return line
+                .sort((a, b) => a.transform[4] - b.transform[4]) // Ordenar por X
+                .map(item => item.str)
+                .join(' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        });
+
+        return processedLines
+            .filter(line => line.length > 0)
+            .join('\n');
     }
 
     /**
-     * Estima ancho de texto con mayor precisión
+     * ✅ NUEVO: Agrupa items de texto por líneas
      */
-    estimateTextWidth(text, textItem) {
-        const fontSize = textItem.transform[0] || 12;
-        const scale = textItem.transform[3] || 1;
-        const avgCharWidth = fontSize * scale * 0.6;
-        return text.length * avgCharWidth;
-    }
+    groupTextItemsByLines(items) {
+        const lines = [];
+        const threshold = 5; // Tolerancia para considerar misma línea
 
-    /**
-     * Estima ancho de carácter
-     */
-    estimateCharWidth(textItem) {
-        const fontSize = textItem.transform[0] || 12;
-        const scale = textItem.transform[3] || 1;
-        return fontSize * scale * 0.6;
-    }
-
-    /**
-     * Procesa item de texto individual
-     */
-    processTextItem(item) {
-        return {
-            text: item.str,
-            x: item.transform[4],
-            y: item.transform[5],
-            width: item.width,
-            height: item.height,
-            fontSize: item.transform[0] || 12,
-            fontName: item.fontName || 'unknown'
-        };
-    }
-
-    /**
-     * Post-procesa el texto extraído
-     */
-    postProcessText(text) {
-        let processed = text;
-        
-        // Limpiar caracteres problemáticos primero
-        processed = this.cleanText(processed);
-        
-        if (this.config.mergeLines) {
-            // Unir líneas que están fragmentadas
-            processed = this.mergeFragmentedLines(processed);
-        }
-        
-        if (this.config.normalizeWhitespace) {
-            // Normalizar espacios en blanco
-            processed = processed.replace(/\s+/g, ' ');
-        }
-        
-        return processed.trim();
-    }
-
-    /**
-     * Une líneas fragmentadas con lógica mejorada
-     */
-    mergeFragmentedLines(text) {
-        const lines = text.split('\n');
-        const mergedLines = [];
-        
-        for (let i = 0; i < lines.length; i++) {
-            let currentLine = lines[i].trim();
+        for (const item of items) {
+            if (!item.transform || item.transform.length < 6) continue;
             
-            if (!currentLine) {
-                // Línea vacía - agregar si no es consecutiva
-                if (i > 0 && mergedLines[mergedLines.length - 1]) {
-                    mergedLines.push('');
+            const y = item.transform[5];
+            let lineFound = false;
+
+            for (const line of lines) {
+                if (line.length === 0) continue;
+                
+                const lineY = line[0].transform[5];
+                if (Math.abs(y - lineY) <= threshold) {
+                    line.push(item);
+                    lineFound = true;
+                    break;
                 }
-                continue;
             }
-            
-            // Verificar si la línea anterior termina de manera incompleta
-            if (i > 0 && this.shouldMergeWithPrevious(currentLine, lines[i - 1])) {
-                // Unir con línea anterior
-                const lastIndex = mergedLines.length - 1;
-                if (lastIndex >= 0) {
-                    mergedLines[lastIndex] = mergedLines[lastIndex] + ' ' + currentLine;
-                } else {
-                    mergedLines.push(currentLine);
-                }
-            } else {
-                mergedLines.push(currentLine);
+
+            if (!lineFound) {
+                lines.push([item]);
             }
         }
-        
-        return mergedLines.join('\n');
+
+        // Ordenar líneas por Y (de arriba hacia abajo)
+        return lines.sort((a, b) => {
+            if (a.length === 0 || b.length === 0) return 0;
+            return b[0].transform[5] - a[0].transform[5];
+        });
     }
 
     /**
-     * Determina si una línea debe unirse con la anterior
+     * ✅ NUEVO: Verifica si es un carácter especial a ignorar
      */
-    shouldMergeWithPrevious(currentLine, previousLine) {
-        if (!currentLine || !previousLine) return false;
-        
-        const prevTrimmed = previousLine.trim();
-        const currTrimmed = currentLine.trim();
-        
-        // Si la línea anterior termina con guión
-        if (prevTrimmed.endsWith('-')) return true;
-        
-        // Si la línea anterior es muy corta y no termina con puntuación
-        if (prevTrimmed.length < 50 && !/[.!?:;]$/.test(prevTrimmed)) {
-            // Y la línea actual no empieza con mayúscula o acorde musical
-            if (!/^[A-Z]/.test(currTrimmed) && !/^[A-G][#b]?/.test(currTrimmed)) {
-                return true;
-            }
-        }
-        
-        return false;
+    isSpecialCharacter(str) {
+        const specialChars = /^[\u0000-\u001F\u007F-\u009F\uFEFF\u200B-\u200D\uFFFE\uFFFF]$/;
+        return specialChars.test(str) || str.length === 0;
     }
 
     /**
-     * Limpia el texto de caracteres problemáticos
+     * ✅ MEJORADO: Extrae metadatos del PDF
      */
-    cleanText(text) {
-        return text
-            .replace(/\u00A0/g, ' ')          // Espacios no-breaking
-            .replace(/\u2013/g, '-')         // En dash
-            .replace(/\u2014/g, '--')        // Em dash
-            .replace(/[\u2018\u2019]/g, "'") // Smart quotes
-            .replace(/[\u201C\u201D]/g, '"') // Smart double quotes
-            .replace(/\u2026/g, '...')       // Ellipsis
-            .replace(/\f/g, '\n')            // Form feed a newline
-            .replace(/\r\n/g, '\n')          // Windows line endings
-            .replace(/\r/g, '\n')            // Mac line endings
-            .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ''); // Control characters
-    }
-
-    /**
-     * Extrae metadata del PDF
-     */
-    async extractMetadata() {
-        if (!this.config.extractMetadata || !this.currentDocument) {
-            return {};
-        }
-
+    async extractMetadata(pdf) {
         try {
-            const metadata = await this.currentDocument.getMetadata();
-            
+            const metadata = await pdf.getMetadata();
             return {
                 title: metadata.info.Title || null,
                 author: metadata.info.Author || null,
@@ -650,80 +443,134 @@ class PDFTextExtractor {
                 producer: metadata.info.Producer || null,
                 creationDate: metadata.info.CreationDate || null,
                 modificationDate: metadata.info.ModDate || null,
-                keywords: metadata.info.Keywords || null,
-                pages: this.currentDocument.numPages,
-                version: metadata.info.PDFFormatVersion || null
+                pdfVersion: metadata.info.PDFFormatVersion || null,
+                pageCount: pdf.numPages
             };
-            
         } catch (error) {
-            console.warn('⚠️ Error extrayendo metadata:', error);
-            return {};
+            console.warn('⚠️ Error extrayendo metadatos:', error);
+            return { pageCount: pdf?.numPages || 0 };
         }
     }
 
     /**
-     * Genera clave de cache para el blob
+     * ✅ NUEVO: Genera clave de cache más específica
      */
-    async generateCacheKey(blob) {
-        return `pdf_${blob.size}_${blob.type}_${Date.now()}`;
+    async generateCacheKey(blob, fileName) {
+        const hash = await this.calculateSimpleHash(blob);
+        return `pdf_${fileName}_${blob.size}_${hash}`;
     }
 
     /**
-     * Configura opciones de extracción
+     * ✅ NUEVO: Calcula hash simple para cache
      */
-    setConfig(newConfig) {
-        this.config = { ...this.config, ...newConfig };
-        console.log('⚙️ Configuración de extracción actualizada:', this.config);
-    }
-
-    /**
-     * Limpia recursos
-     */
-    async cleanup() {
-        if (this.currentDocument) {
-            this.currentDocument.destroy();
-            this.currentDocument = null;
+    async calculateSimpleHash(blob) {
+        const arrayBuffer = await blob.slice(0, 1024).arrayBuffer(); // Primeros 1KB
+        let hash = 0;
+        const uint8Array = new Uint8Array(arrayBuffer);
+        
+        for (let i = 0; i < uint8Array.length; i++) {
+            hash = ((hash << 5) - hash + uint8Array[i]) & 0xffffffff;
         }
         
-        if (this.ocrWorker) {
-            await this.ocrWorker.terminate();
-            this.ocrWorker = null;
-        }
+        return Math.abs(hash).toString(16);
     }
 
     /**
-     * Obtiene mensaje de ayuda para PDFs sin texto extraíble
+     * ✅ NUEVO: Mensaje de ayuda para entrada manual
      */
-    getHelpMessage() {
+    getManualInputHelpMessage() {
         return {
-            title: "PDF con texto como imagen detectado",
-            description: "Este PDF contiene texto en formato de imagen que no puede ser extraído automáticamente.",
+            title: "Se requiere entrada manual",
+            description: "El PDF no pudo ser procesado automáticamente. Puedes ingresar los acordes manualmente.",
             suggestions: [
-                "✏️ Verifica que el PDF tenga texto seleccionable (intenta seleccionar texto con el mouse)",
-                "🔄 Si el PDF es escaneado, considera convertirlo a texto usando herramientas OCR externas",
-                "📝 Como alternativa, puedes escribir los acordes manualmente en un editor de texto",
-                "🎼 El PDF se puede visualizar normalmente, pero la detección automática de acordes no funcionará"
+                "🎼 Usa el botón 'Agregar Acordes Manualmente' para escribir los acordes",
+                "📄 Puedes ver el PDF mientras escribes los acordes",
+                "✏️ Escribe los acordes en notación americana (C, Dm, G7, etc.)",
+                "💡 El sistema detectará automáticamente los acordes que escribas"
             ],
-            troubleshooting: {
-                textSelectable: "¿Puedes seleccionar texto en el PDF? Si no, es una imagen escaneada.",
-                ocrAvailable: "El OCR automático está " + (this.config.useOCRFallback ? "activado" : "desactivado"),
-                fileType: "Tipo de archivo procesado: PDF con contenido de imagen"
-            }
+            actions: [
+                { text: "Agregar Acordes Manualmente", action: "showManualInput" },
+                { text: "Ver PDF Original", action: "showPDF" }
+            ]
         };
     }
 
     /**
-     * Obtiene estadísticas de extracción
+     * ✅ NUEVO: Mensaje de ayuda para errores
+     */
+    getErrorHelpMessage(error) {
+        const errorMessages = {
+            'NetworkError': 'Error de conexión. Verifica tu conexión a internet.',
+            'SecurityError': 'Error de seguridad. El PDF puede estar protegido.',
+            'InvalidPDF': 'El archivo no es un PDF válido.',
+            'CorruptedPDF': 'El PDF parece estar dañado.',
+            'default': 'Error procesando el PDF. Intenta con otro archivo.'
+        };
+
+        const errorType = error.name || 'default';
+        return errorMessages[errorType] || errorMessages.default;
+    }
+
+    /**
+     * ✅ MEJORADO: Configuración con validación
+     */
+    setConfig(newConfig) {
+        const validKeys = Object.keys(this.config);
+        const filteredConfig = Object.keys(newConfig)
+            .filter(key => validKeys.includes(key))
+            .reduce((obj, key) => {
+                obj[key] = newConfig[key];
+                return obj;
+            }, {});
+
+        this.config = { ...this.config, ...filteredConfig };
+        console.log('⚙️ Configuración de extracción actualizada:', this.config);
+    }
+
+    /**
+     * ✅ MEJORADO: Limpieza de recursos
+     */
+    async cleanup() {
+        try {
+            if (this.currentDocument) {
+                this.currentDocument.destroy();
+                this.currentDocument = null;
+                console.log('🗑️ Documento PDF limpiado');
+            }
+            
+            if (this.ocrWorker && this.ocrInitialized) {
+                await this.ocrWorker.terminate();
+                this.ocrWorker = null;
+                this.ocrInitialized = false;
+                console.log('🗑️ OCR Worker terminado');
+            }
+
+            // Limpiar cache si es muy grande
+            if (this.extractionCache.size > 50) {
+                this.extractionCache.clear();
+                console.log('🗑️ Cache de extracción limpiado');
+            }
+
+        } catch (error) {
+            console.warn('⚠️ Error durante limpieza:', error);
+        }
+    }
+
+    /**
+     * ✅ NUEVO: Información de debug
      */
     getDebugInfo() {
         return {
             config: this.config,
             hasDocument: !!this.currentDocument,
             hasOCRWorker: !!this.ocrWorker,
-            cacheSize: this.extractionCache.size
+            ocrInitialized: this.ocrInitialized,
+            cacheSize: this.extractionCache.size,
+            version: '2.0.0-fixed'
         };
     }
 }
 
 // === EXPORTAR ===
 window.PDFTextExtractor = PDFTextExtractor;
+console.log('📄 PDF Text Extractor CORREGIDO cargado - Versión 2.0.0');
