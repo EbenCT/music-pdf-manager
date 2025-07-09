@@ -24,48 +24,51 @@ class PDFTextExtractor {
     /**
      * Inicializa Tesseract.js para OCR fallback
      */
-    async initializeOCR() {
-        if (this.ocrWorker) return this.ocrWorker;
-        
-        try {
-            // Cargar Tesseract.js dinámicamente
-            if (typeof Tesseract === 'undefined') {
-                console.log('📥 Cargando Tesseract.js...');
-                await this.loadTesseract();
-            }
-            
-            console.log('🤖 Inicializando OCR worker...');
-            this.ocrWorker = await Tesseract.createWorker();
-            await this.ocrWorker.loadLanguage(this.config.ocrLanguage);
-            await this.ocrWorker.initialize(this.config.ocrLanguage);
-            
-            console.log('✅ OCR worker inicializado');
-            return this.ocrWorker;
-            
-        } catch (error) {
-            console.warn('⚠️ No se pudo inicializar OCR:', error.message);
+async initializeOCR() {
+    if (this.ocrWorker) return this.ocrWorker;
+    
+    try {
+        // Verificar que Tesseract esté disponible (ya cargado en index.html)
+        if (typeof Tesseract === 'undefined') {
+            console.error('❌ Tesseract.js no está disponible');
             return null;
         }
+        
+        console.log('🤖 Inicializando OCR worker...');
+        
+        // Configurar opciones del worker para usar CDN permitido
+        const workerOptions = {
+            workerPath: 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.4/worker.min.js',
+            corePath: 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.4/tesseract-core.wasm.js',
+            logger: m => {
+                if (m.status === 'recognizing text') {
+                    console.log(`🔍 OCR progreso: ${Math.round(m.progress * 100)}%`);
+                }
+            }
+        };
+        
+        this.ocrWorker = await Tesseract.createWorker(workerOptions);
+        await this.ocrWorker.loadLanguage(this.config.ocrLanguage);
+        await this.ocrWorker.initialize(this.config.ocrLanguage);
+        
+        console.log('✅ OCR worker inicializado correctamente');
+        return this.ocrWorker;
+        
+    } catch (error) {
+        console.warn('⚠️ No se pudo inicializar OCR:', error.message);
+        this.ocrWorker = null;
+        return null;
     }
+}
 
     /**
      * Carga Tesseract.js dinámicamente desde cdnjs.cloudflare.com
      */
-    async loadTesseract() {
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.4/tesseract.min.js';
-            script.onload = () => {
-                console.log('✅ Tesseract.js cargado desde cdnjs.cloudflare.com');
-                resolve();
-            };
-            script.onerror = () => {
-                console.error('❌ Error cargando Tesseract.js desde cdnjs.cloudflare.com');
-                reject(new Error('Error cargando Tesseract.js'));
-            };
-            document.head.appendChild(script);
-        });
-    }
+async loadTesseract() {
+    // Este método ya no es necesario - Tesseract está pre-cargado
+    console.log('✅ Tesseract.js ya está cargado desde index.html');
+    return Promise.resolve();
+}
 
     /**
      * Extrae texto de un blob PDF con debugging mejorado
