@@ -19,6 +19,7 @@ class PDFTextExtractor {
         this.currentDocument = null;
         this.extractionCache = new Map();
         this.ocrWorker = null;
+        this.ocrScheduler = null;
     }
 
     /**
@@ -34,24 +35,27 @@ async initializeOCR() {
             return null;
         }
         
-        console.log('🤖 Inicializando OCR worker...');
+        console.log('🤖 Inicializando OCR (modo sin workers)...');
         
-        // Configurar opciones del worker para usar CDN permitido
-        const workerOptions = {
-            workerPath: 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.4/worker.min.js',
-            corePath: 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.4/tesseract-core.wasm.js',
+        // Usar createScheduler sin workers para evitar problemas de CSP
+        this.ocrScheduler = Tesseract.createScheduler();
+        
+        // Crear worker sin usar web workers reales
+        const worker = await Tesseract.createWorker({
             logger: m => {
                 if (m.status === 'recognizing text') {
                     console.log(`🔍 OCR progreso: ${Math.round(m.progress * 100)}%`);
                 }
             }
-        };
+        });
         
-        this.ocrWorker = await Tesseract.createWorker(workerOptions);
-        await this.ocrWorker.loadLanguage(this.config.ocrLanguage);
-        await this.ocrWorker.initialize(this.config.ocrLanguage);
+        await worker.loadLanguage(this.config.ocrLanguage);
+        await worker.initialize(this.config.ocrLanguage);
         
-        console.log('✅ OCR worker inicializado correctamente');
+        this.ocrScheduler.addWorker(worker);
+        this.ocrWorker = this.ocrScheduler;
+        
+        console.log('✅ OCR inicializado correctamente (sin workers)');
         return this.ocrWorker;
         
     } catch (error) {
@@ -59,15 +63,6 @@ async initializeOCR() {
         this.ocrWorker = null;
         return null;
     }
-}
-
-    /**
-     * Carga Tesseract.js dinámicamente desde cdnjs.cloudflare.com
-     */
-async loadTesseract() {
-    // Este método ya no es necesario - Tesseract está pre-cargado
-    console.log('✅ Tesseract.js ya está cargado desde index.html');
-    return Promise.resolve();
 }
 
     /**
@@ -255,49 +250,49 @@ async loadTesseract() {
     /**
      * Extrae texto usando OCR como fallback
      */
-    async extractWithOCR() {
-        try {
-            const worker = await this.initializeOCR();
-            if (!worker) {
-                throw new Error('OCR worker no disponible');
-            }
-            
-            const pages = [];
-            let combinedText = '';
-            
-            for (let pageNum = 1; pageNum <= this.currentDocument.numPages; pageNum++) {
-                console.log(`🤖 OCR - Procesando página ${pageNum}/${this.currentDocument.numPages}`);
-                
-                // Convertir página a imagen
-                const imageData = await this.renderPageToImage(pageNum);
-                
-                // Aplicar OCR
-                const { data: { text } } = await worker.recognize(imageData);
-                
-                console.log(`📖 OCR - Página ${pageNum}: ${text.length} caracteres extraídos`);
-                
-                pages.push({
-                    pageNumber: pageNum,
-                    text: text,
-                    method: 'OCR'
-                });
-                
-                if (combinedText.length > 0) {
-                    combinedText += '\n\n--- Página ' + pageNum + ' ---\n\n';
-                }
-                combinedText += text;
-            }
-            
-            return {
-                text: this.postProcessText(combinedText),
-                pages: pages
-            };
-            
-        } catch (error) {
-            console.error('❌ Error en OCR fallback:', error);
-            return null;
+async extractWithOCR() {
+    try {
+        const scheduler = await this.initializeOCR();
+        if (!scheduler) {
+            throw new Error('OCR scheduler no disponible');
         }
+        
+        const pages = [];
+        let combinedText = '';
+        
+        for (let pageNum = 1; pageNum <= this.currentDocument.numPages; pageNum++) {
+            console.log(`🤖 OCR - Procesando página ${pageNum}/${this.currentDocument.numPages}`);
+            
+            // Convertir página a imagen
+            const imageData = await this.renderPageToImage(pageNum);
+            
+            // Aplicar OCR usando el scheduler
+            const { data: { text } } = await scheduler.addJob('recognize', imageData);
+            
+            console.log(`📖 OCR - Página ${pageNum}: ${text.length} caracteres extraídos`);
+            
+            pages.push({
+                pageNumber: pageNum,
+                text: text,
+                method: 'OCR'
+            });
+            
+            if (combinedText.length > 0) {
+                combinedText += '\n\n--- Página ' + pageNum + ' ---\n\n';
+            }
+            combinedText += text;
+        }
+        
+        return {
+            text: this.postProcessText(combinedText),
+            pages: pages
+        };
+        
+    } catch (error) {
+        console.error('❌ Error en OCR fallback:', error);
+        return null;
     }
+}
 
     /**
      * Renderiza página del PDF como imagen para OCR
@@ -682,17 +677,19 @@ async loadTesseract() {
     /**
      * Limpia recursos
      */
-    async cleanup() {
-        if (this.currentDocument) {
-            this.currentDocument.destroy();
-            this.currentDocument = null;
-        }
-        
-        if (this.ocrWorker) {
-            await this.ocrWorker.terminate();
-            this.ocrWorker = null;
-        }
+async cleanup() {
+    if (this.currentDocument) {
+        this.currentDocument.destroy();
+        this.currentDocument = null;
     }
+    
+    if (this.ocrScheduler) {
+        await this.ocrScheduler.terminate();
+        this.ocrScheduler = null;
+    }
+    
+    this.ocrWorker = null;
+}
 
     /**
      * Obtiene mensaje de ayuda para PDFs sin texto extraíble
@@ -718,14 +715,15 @@ async loadTesseract() {
     /**
      * Obtiene estadísticas de extracción
      */
-    getDebugInfo() {
-        return {
-            config: this.config,
-            hasDocument: !!this.currentDocument,
-            hasOCRWorker: !!this.ocrWorker,
-            cacheSize: this.extractionCache.size
-        };
-    }
+getDebugInfo() {
+    return {
+        config: this.config,
+        hasDocument: !!this.currentDocument,
+        hasOCRScheduler: !!this.ocrScheduler,
+        hasOCRWorker: !!this.ocrWorker,  // Mantenido para compatibilidad
+        cacheSize: this.extractionCache.size
+    };
+}
 }
 
 // === EXPORTAR ===
